@@ -16,13 +16,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coolprojectthatrevolutionizesc"
-version = "0.1.0"
-dependencies = [
- "console",
-]
-
-[[package]]
 name = "encode_unicode"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -33,6 +26,13 @@ name = "libc"
 version = "0.2.172"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d750af042f7ef4f724306de029d18836c26c1765a54a6a3f094cbd23a7267ffa"
+
+[[package]]
+name = "nightfury"
+version = "0.1.0"
+dependencies = [
+ "console",
+]
 
 [[package]]
 name = "once_cell"
