@@ -9,19 +9,27 @@ struct RootNode {
     children: Vec<TreeNode>,
 }
 
+#[derive(Debug, Clone)]
+pub enum NodeType {
+    Keyword { short: String, expanded: String },
+    UserDefined { final_chars: Vec<char> },
+    Null,
+}
+
 #[derive(Debug)]
 pub struct TreeNode {
-    expanded_name: String,
-    short_name: String,
+    value: NodeType,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
 }
 
 impl TreeNode {
-    pub fn new(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
+    pub fn new_keyword(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
-            expanded_name,
-            short_name,
+            value: NodeType::Keyword {
+                short: short_name,
+                expanded: expanded_name,
+            },
             parent: None,
             children: Vec::new(),
         }))
@@ -29,7 +37,7 @@ impl TreeNode {
 
     pub fn dbg(&self) {
         for child in self.children.iter() {
-            print!("{} ", child.borrow().expanded_name);
+            print!("{:?} ", child.borrow().value);
         }
         println!();
         for child in self.children.iter() {
@@ -37,14 +45,25 @@ impl TreeNode {
         }
     }
 
-    pub fn new_with_parent(
+    pub fn new(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+        let ret = Rc::new(RefCell::new(Self {
+            value,
+            parent: Some(Rc::clone(parent)),
+            children: Vec::new(),
+        }));
+        parent.borrow_mut().children.push(Rc::clone(&ret));
+        ret
+    }
+    pub fn new_keyword_with_parent(
         expanded_name: String,
         short_name: String,
         parent: Rc<RefCell<TreeNode>>,
     ) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
-            expanded_name,
-            short_name,
+            value: NodeType::Keyword {
+                short: short_name,
+                expanded: expanded_name,
+            },
             parent: Some(Rc::clone(&parent)),
             children: Vec::new(),
         }));
@@ -65,45 +84,64 @@ impl TreeCursor {
             input_buf: String::new(),
         }
     }
-    pub fn advance(&mut self, input: char) -> Result<(), String> {
-        self.input_buf.push(input);
+    pub fn advance(&mut self, input: char) -> Option<String> {
         // println!("Input buf: {}", self.input_buf);
         let binding = self.cur_ast_pos.upgrade().expect("Tree failure");
         let borrow = binding.borrow();
-        let possibly_next_node = borrow
-            .children
-            .iter()
-            .find(|child| child.borrow().short_name == self.input_buf);
-        if let Some(next_node) = possibly_next_node {
-            // println!("Found: {}", next_node.borrow().expanded_name);
-            let next_node = Rc::clone(&next_node);
-            self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
-            self.input_buf.clear();
+        match &borrow.value {
+            NodeType::Keyword { expanded, .. } => {
+                self.input_buf.push(input);
+                let possibly_next_node = borrow.children.iter().find(|child| {
+                    if let NodeType::Keyword { short, .. } = &child.borrow().value {
+                        *short == self.input_buf
+                    } else {
+                        false
+                    }
+                });
+                if let Some(NodeType::Keyword { expanded, .. }) =
+                    possibly_next_node.and_then(|res| Some(res.borrow().value.clone()))
+                {
+                    let next_node = Rc::clone(&possibly_next_node.unwrap());
+                    println!("{:?}", next_node.borrow().value);
+                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
+                    self.input_buf.clear();
+                    return Some(expanded);
+                }
+            }
+            NodeType::UserDefined { final_chars, .. } => {
+                let child_idx = final_chars.iter().position(|char| *char == input);
+                println!("{child_idx:?}");
+                if let Some(child_idx) = child_idx {
+                    let next_node = Rc::clone(&borrow.children[child_idx]);
+                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
+                    let ret = Some(self.input_buf.clone());
+                    self.input_buf.clear();
+                    return ret;
+                }
+            }
+            _ => todo!(),
         }
-        Ok(())
+        None
     }
     fn dump(&self) {
         println!(
-            "Last matched node: {}",
-            self.cur_ast_pos.upgrade().unwrap().borrow().expanded_name
+            "Last matched node: {:?}",
+            self.cur_ast_pos.upgrade().unwrap().borrow().value
         );
         println!("Input buf: {}", self.input_buf);
     }
-    pub fn get_last_matched_node(&self) -> String {
-        self.cur_ast_pos
-            .upgrade()
-            .unwrap()
-            .borrow()
-            .expanded_name
-            .clone()
-    }
+    // pub fn get_last_matched_node(&self) -> String {
+    //     self.cur_ast_pos
+    //         .upgrade()
+    //         .unwrap()
+    //         .borrow()
+    //         .expanded_name
+    //         .clone()
+    // }
     pub fn is_done(&self) -> bool {
-        self.cur_ast_pos
-            .upgrade()
-            .unwrap()
-            .borrow()
-            .children
-            .is_empty()
+        let ast_ref = self.cur_ast_pos.upgrade().unwrap();
+        let binding = ast_ref.borrow();
+        binding.children.is_empty()
     }
 }
 
@@ -119,16 +157,18 @@ mod tests {
 
     #[test]
     fn simple_tree() {
-        let root = TreeNode::new("int".to_string(), "i".to_string());
-        let _other = TreeNode::new_with_parent("asdf".to_string(), "a".to_string(), root.clone());
+        let root = TreeNode::new_keyword("int".to_string(), "i".to_string());
+        let _other =
+            TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), root.clone());
         assert_eq!(root.borrow().children.len(), 1);
     }
 
     #[test]
     fn simple_cursor_steps() {
-        let root = TreeNode::new("BEGIN".to_string(), String::new());
-        let second = TreeNode::new_with_parent("int".to_string(), "i".to_string(), root.clone());
-        TreeNode::new_with_parent("asdf".to_string(), "a".to_string(), second.clone());
+        let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
+        let second =
+            TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), root.clone());
+        TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), second.clone());
         let mut cursor = TreeCursor {
             cur_ast_pos: Rc::downgrade(&root),
             input_buf: String::new(),
