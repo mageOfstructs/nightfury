@@ -1,0 +1,15 @@
+[package]
+name = "coolprojectthatrevolutionizesc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+console = "0.15.11"
+
+[lib]
+name = "lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bin"
+path = "src/main.rs"
