@@ -18,7 +18,7 @@ pub enum NodeType {
     Null,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeValue {
     pub ntype: NodeType,
     pub optional: bool,
@@ -132,6 +132,8 @@ impl TreeCursor {
         self.input_buf.clear();
     }
     pub fn search_rec(&self, treenode: &Rc<RefCell<TreeNode>>) -> Option<Rc<RefCell<TreeNode>>> {
+        // println!("search_rec: {:?}", treenode.borrow().value);
+        // println!("{}\n", self.input_buf);
         let binding = treenode;
         let borrow = binding.borrow();
         let mut keyword_match = None;
@@ -143,6 +145,7 @@ impl TreeCursor {
                     ..
                 } if self.input_buf == *short => {
                     keyword_match = Some(child.clone());
+                    break;
                 }
                 NodeValue {
                     ntype: NodeType::Null,
@@ -150,6 +153,9 @@ impl TreeCursor {
                 }
                 | NodeValue { optional: true, .. } => {
                     keyword_match = self.search_rec(&child);
+                    if keyword_match.is_some() {
+                        break;
+                    }
                 }
                 _ => {}
             }
