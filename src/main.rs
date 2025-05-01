@@ -14,16 +14,19 @@ fn main() {
     let types = TreeNode::new(NodeType::Null, &child);
 
     let int = TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
+    let float =
+        TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
     child.borrow_mut().add_child(&types);
     child2.borrow_mut().add_child(&types);
 
-    let child = TreeNode::new(
+    let userdefined_node = TreeNode::new(
         NodeType::UserDefined {
             final_chars: vec!['='],
         },
         &int,
     );
-    let child = TreeNode::new(NodeType::Null, &child);
+    let child = TreeNode::new(NodeType::Null, &userdefined_node);
+    float.borrow_mut().add_child(&userdefined_node);
 
     root.borrow().dbg();
     let mut cursor = TreeCursor::new(&root);
