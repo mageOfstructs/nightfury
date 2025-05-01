@@ -86,7 +86,7 @@ impl TreeCursor {
             input_buf: String::new(),
         }
     }
-    fn handle_userdefined(&mut self, input: char, final_chars: Vec<char>) -> Option<String> {
+    fn handle_userdefined(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
         if let Some(child_idx) = child_idx {
             let strong_ref = self.get_cur_ast_binding();
@@ -127,13 +127,9 @@ impl TreeCursor {
             //     }
             // }
             NodeType::UserDefined { final_chars, .. } => {
-                let child_idx = final_chars.iter().position(|char| *char == input);
-                if let Some(child_idx) = child_idx {
-                    let next_node = Rc::clone(&borrow.children[child_idx]);
-                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
-                    let ret = Some(self.input_buf.clone());
-                    self.input_buf.clear();
-                    return ret;
+                let res = self.handle_userdefined(input, final_chars);
+                if res.is_some() {
+                    return res;
                 }
             }
             _ => {
@@ -167,13 +163,9 @@ impl TreeCursor {
                 if let Some(node) = userdef_match {
                     self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
                     if let NodeType::UserDefined { final_chars } = &node.borrow().value {
-                        let child_idx = final_chars.iter().position(|char| *char == input);
-                        if let Some(child_idx) = child_idx {
-                            let next_node = Rc::clone(&borrow.children[child_idx]);
-                            self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
-                            let ret = Some(self.input_buf.clone());
-                            self.input_buf.clear();
-                            return ret;
+                        let res = self.handle_userdefined(input, final_chars);
+                        if res.is_some() {
+                            return res;
                         }
                     } else {
                         unreachable!()
