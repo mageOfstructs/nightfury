@@ -11,7 +11,7 @@ fn main() {
         TreeNode::new_keyword_with_parent("unsigned".to_string(), "u".to_string(), root.clone());
     let child2 =
         TreeNode::new_keyword_with_parent("signed".to_string(), "s".to_string(), root.clone());
-    let types = TreeNode::new(NodeType::Null, &child);
+    let types = TreeNode::new_required(NodeType::Null, &child);
 
     let int = TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
     let float =
@@ -19,13 +19,13 @@ fn main() {
     child.borrow_mut().add_child(&types);
     child2.borrow_mut().add_child(&types);
 
-    let userdefined_node = TreeNode::new(
+    let userdefined_node = TreeNode::new_required(
         NodeType::UserDefined {
             final_chars: vec!['='],
         },
         &int,
     );
-    let child = TreeNode::new(NodeType::Null, &userdefined_node);
+    let child = TreeNode::new_required(NodeType::Null, &userdefined_node);
     float.borrow_mut().add_child(&userdefined_node);
 
     root.borrow().dbg();

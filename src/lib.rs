@@ -19,8 +19,14 @@ pub enum NodeType {
 }
 
 #[derive(Debug)]
+pub struct NodeValue {
+    pub ntype: NodeType,
+    pub optional: bool,
+}
+
+#[derive(Debug)]
 pub struct TreeNode {
-    value: NodeType,
+    value: NodeValue,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
 }
@@ -31,9 +37,12 @@ impl TreeNode {
     }
     pub fn new_keyword(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
-            value: NodeType::Keyword {
-                short: short_name,
-                expanded: expanded_name,
+            value: NodeValue {
+                ntype: NodeType::Keyword {
+                    short: short_name,
+                    expanded: expanded_name,
+                },
+                optional: false,
             },
             parent: None,
             children: Vec::new(),
@@ -50,9 +59,22 @@ impl TreeNode {
         }
     }
 
-    pub fn new(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+    pub fn new(value: NodeValue, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
             value,
+            parent: Some(Rc::clone(parent)),
+            children: Vec::new(),
+        }));
+        parent.borrow_mut().children.push(Rc::clone(&ret));
+        ret
+    }
+
+    pub fn new_required(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+        let ret = Rc::new(RefCell::new(Self {
+            value: NodeValue {
+                ntype: value,
+                optional: false,
+            },
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
         }));
@@ -65,9 +87,12 @@ impl TreeNode {
         parent: Rc<RefCell<TreeNode>>,
     ) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
-            value: NodeType::Keyword {
-                short: short_name,
-                expanded: expanded_name,
+            value: NodeValue {
+                ntype: NodeType::Keyword {
+                    short: short_name,
+                    expanded: expanded_name,
+                },
+                optional: false,
             },
             parent: Some(Rc::clone(&parent)),
             children: Vec::new(),
@@ -113,10 +138,17 @@ impl TreeCursor {
         for child in &borrow.children {
             let node_val = &child.borrow().value;
             match node_val {
-                NodeType::Keyword { short, .. } if self.input_buf == *short => {
+                NodeValue {
+                    ntype: NodeType::Keyword { short, .. },
+                    ..
+                } if self.input_buf == *short => {
                     keyword_match = Some(child.clone());
                 }
-                NodeType::Null => {
+                NodeValue {
+                    ntype: NodeType::Null,
+                    ..
+                }
+                | NodeValue { optional: true, .. } => {
                     keyword_match = self.search_rec(&child);
                 }
                 _ => {}
@@ -128,7 +160,11 @@ impl TreeCursor {
 
         // so we can start typing right away
         let userdef_match = borrow.children.iter().find(|child| {
-            if let NodeType::UserDefined { .. } = child.borrow().value {
+            if let NodeValue {
+                ntype: NodeType::UserDefined { .. },
+                ..
+            } = child.borrow().value
+            {
                 true
             } else {
                 false
@@ -164,7 +200,10 @@ impl TreeCursor {
             //         return Some(expanded);
             //     }
             // }
-            NodeType::UserDefined { final_chars, .. } => {
+            NodeValue {
+                ntype: NodeType::UserDefined { final_chars, .. },
+                ..
+            } => {
                 let res = self.handle_userdefined(input, final_chars);
                 if res.is_some() {
                     return res;
@@ -175,11 +214,17 @@ impl TreeCursor {
                 if let Some(node) = res {
                     self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
                     return match &node.borrow().value {
-                        NodeType::Keyword { expanded, .. } => {
+                        NodeValue {
+                            ntype: NodeType::Keyword { expanded, .. },
+                            ..
+                        } => {
                             self.input_buf.clear();
                             Some(expanded.clone())
                         }
-                        NodeType::UserDefined { final_chars } => {
+                        NodeValue {
+                            ntype: NodeType::UserDefined { final_chars },
+                            ..
+                        } => {
                             let res = self.handle_userdefined(input, &final_chars);
                             res
                         }
@@ -187,49 +232,6 @@ impl TreeCursor {
                     };
                     // self.input_buf.clear();
                 }
-                let keyword_match = borrow.children.iter().find(|child| {
-                    let node_val = &child.borrow().value;
-                    if let NodeType::Keyword { short, .. } = node_val {
-                        self.input_buf == *short
-                    } else {
-                        false
-                    }
-                });
-                if let Some(node) = keyword_match {
-                    let next_node = Rc::clone(&node);
-                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
-                    self.input_buf.clear();
-                    if let NodeType::Keyword { expanded, .. } = &node.borrow().value {
-                        return Some(expanded.clone());
-                    } else {
-                        unreachable!()
-                    }
-                }
-
-                // so we can start typing right away
-                let userdef_match = borrow.children.iter().find(|child| {
-                    if let NodeType::UserDefined { .. } = child.borrow().value {
-                        true
-                    } else {
-                        false
-                    }
-                });
-                if let Some(node) = userdef_match {
-                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
-                    if let NodeType::UserDefined { final_chars } = &node.borrow().value {
-                        let res = self.handle_userdefined(input, final_chars);
-                        if res.is_some() {
-                            return res;
-                        }
-                    } else {
-                        unreachable!()
-                    }
-                }
-                // if let Some(node) = keyword_match {
-                //     match node.borrow().value {
-                //         NodeType::Keyword { short, expanded }
-                //     }
-                // }
             }
         }
         None
@@ -252,7 +254,11 @@ impl TreeCursor {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
-        if let NodeType::UserDefined { .. } = self.get_cur_ast_binding().borrow().value {
+        if let NodeValue {
+            ntype: NodeType::UserDefined { .. },
+            ..
+        } = self.get_cur_ast_binding().borrow().value
+        {
             true
         } else {
             false
