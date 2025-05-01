@@ -1,3 +1,5 @@
+use core::borrow;
+use std::cell::Ref;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
@@ -84,33 +86,48 @@ impl TreeCursor {
             input_buf: String::new(),
         }
     }
+    fn handle_userdefined(&mut self, input: char, final_chars: Vec<char>) -> Option<String> {
+        let child_idx = final_chars.iter().position(|char| *char == input);
+        if let Some(child_idx) = child_idx {
+            let strong_ref = self.get_cur_ast_binding();
+            let borrow = strong_ref.borrow();
+            let next_node = Rc::clone(&borrow.children[child_idx]);
+            self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
+            let ret = Some(self.input_buf.clone());
+            self.input_buf.clear();
+            ret
+        } else {
+            None
+        }
+    }
     pub fn advance(&mut self, input: char) -> Option<String> {
         // println!("Input buf: {}", self.input_buf);
         let binding = self.cur_ast_pos.upgrade().expect("Tree failure");
         let borrow = binding.borrow();
+        self.input_buf.push(input);
         match &borrow.value {
-            NodeType::Keyword { expanded, .. } => {
-                self.input_buf.push(input);
-                let possibly_next_node = borrow.children.iter().find(|child| {
-                    if let NodeType::Keyword { short, .. } = &child.borrow().value {
-                        *short == self.input_buf
-                    } else {
-                        false
-                    }
-                });
-                if let Some(NodeType::Keyword { expanded, .. }) =
-                    possibly_next_node.and_then(|res| Some(res.borrow().value.clone()))
-                {
-                    let next_node = Rc::clone(&possibly_next_node.unwrap());
-                    println!("{:?}", next_node.borrow().value);
-                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
-                    self.input_buf.clear();
-                    return Some(expanded);
-                }
-            }
+            // NodeType::Null | NodeType::Keyword { .. } => {}
+            // NodeType::Keyword { expanded, .. } => {
+            //     self.input_buf.push(input);
+            //     let possibly_next_node = borrow.children.iter().find(|child| {
+            //         if let NodeType::Keyword { short, .. } = &child.borrow().value {
+            //             *short == self.input_buf
+            //         } else {
+            //             false
+            //         }
+            //     });
+            //     if let Some(NodeType::Keyword { expanded, .. }) =
+            //         possibly_next_node.and_then(|res| Some(res.borrow().value.clone()))
+            //     {
+            //         let next_node = Rc::clone(&possibly_next_node.unwrap());
+            //         println!("{:?}", next_node.borrow().value);
+            //         self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
+            //         self.input_buf.clear();
+            //         return Some(expanded);
+            //     }
+            // }
             NodeType::UserDefined { final_chars, .. } => {
                 let child_idx = final_chars.iter().position(|char| *char == input);
-                println!("{child_idx:?}");
                 if let Some(child_idx) = child_idx {
                     let next_node = Rc::clone(&borrow.children[child_idx]);
                     self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
@@ -119,7 +136,55 @@ impl TreeCursor {
                     return ret;
                 }
             }
-            _ => todo!(),
+            _ => {
+                let keyword_match = borrow.children.iter().find(|child| {
+                    let node_val = &child.borrow().value;
+                    if let NodeType::Keyword { short, .. } = node_val {
+                        self.input_buf == *short
+                    } else {
+                        false
+                    }
+                });
+                if let Some(node) = keyword_match {
+                    let next_node = Rc::clone(&node);
+                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
+                    self.input_buf.clear();
+                    if let NodeType::Keyword { expanded, .. } = &node.borrow().value {
+                        return Some(expanded.clone());
+                    } else {
+                        unreachable!()
+                    }
+                }
+
+                // so we can start typing right away
+                let userdef_match = borrow.children.iter().find(|child| {
+                    if let NodeType::UserDefined { .. } = child.borrow().value {
+                        true
+                    } else {
+                        false
+                    }
+                });
+                if let Some(node) = userdef_match {
+                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
+                    if let NodeType::UserDefined { final_chars } = &node.borrow().value {
+                        let child_idx = final_chars.iter().position(|char| *char == input);
+                        if let Some(child_idx) = child_idx {
+                            let next_node = Rc::clone(&borrow.children[child_idx]);
+                            self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
+                            let ret = Some(self.input_buf.clone());
+                            self.input_buf.clear();
+                            return ret;
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+                // if let Some(node) = keyword_match {
+                //     match node.borrow().value {
+                //         NodeType::Keyword { short, expanded }
+                //     }
+                // }
+            }
         }
         None
     }
@@ -130,18 +195,22 @@ impl TreeCursor {
         );
         println!("Input buf: {}", self.input_buf);
     }
-    // pub fn get_last_matched_node(&self) -> String {
-    //     self.cur_ast_pos
-    //         .upgrade()
-    //         .unwrap()
-    //         .borrow()
-    //         .expanded_name
-    //         .clone()
-    // }
+
     pub fn is_done(&self) -> bool {
         let ast_ref = self.cur_ast_pos.upgrade().unwrap();
         let binding = ast_ref.borrow();
         binding.children.is_empty()
+    }
+
+    fn get_cur_ast_binding(&self) -> Rc<RefCell<TreeNode>> {
+        self.cur_ast_pos.upgrade().unwrap()
+    }
+    pub fn is_in_userdefined_stage(&self) -> bool {
+        if let NodeType::UserDefined { .. } = self.get_cur_ast_binding().borrow().value {
+            true
+        } else {
+            false
+        }
     }
 }
 
