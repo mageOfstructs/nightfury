@@ -26,6 +26,9 @@ pub struct TreeNode {
 }
 
 impl TreeNode {
+    pub fn add_child(&mut self, child: &Rc<RefCell<TreeNode>>) {
+        self.children.push(Rc::clone(&child));
+    }
     pub fn new_keyword(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             value: NodeType::Keyword {
@@ -100,8 +103,43 @@ impl TreeCursor {
             None
         }
     }
+    pub fn clear_inputbuf(&mut self) {
+        self.input_buf.clear();
+    }
+    pub fn search_rec(&self, treenode: &Rc<RefCell<TreeNode>>) -> Option<Rc<RefCell<TreeNode>>> {
+        let binding = treenode;
+        let borrow = binding.borrow();
+        let mut keyword_match = None;
+        for child in &borrow.children {
+            let node_val = &child.borrow().value;
+            match node_val {
+                NodeType::Keyword { short, .. } if self.input_buf == *short => {
+                    keyword_match = Some(child.clone());
+                }
+                NodeType::Null => {
+                    keyword_match = self.search_rec(&child);
+                }
+                _ => {}
+            }
+        }
+        if keyword_match.is_some() {
+            return keyword_match;
+        }
+
+        // so we can start typing right away
+        let userdef_match = borrow.children.iter().find(|child| {
+            if let NodeType::UserDefined { .. } = child.borrow().value {
+                true
+            } else {
+                false
+            }
+        });
+        if userdef_match.is_some() {
+            return userdef_match.cloned();
+        }
+        None
+    }
     pub fn advance(&mut self, input: char) -> Option<String> {
-        // println!("Input buf: {}", self.input_buf);
         let binding = self.cur_ast_pos.upgrade().expect("Tree failure");
         let borrow = binding.borrow();
         self.input_buf.push(input);
@@ -133,6 +171,22 @@ impl TreeCursor {
                 }
             }
             _ => {
+                let res = self.search_rec(&binding);
+                if let Some(node) = res {
+                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
+                    return match &node.borrow().value {
+                        NodeType::Keyword { expanded, .. } => {
+                            self.input_buf.clear();
+                            Some(expanded.clone())
+                        }
+                        NodeType::UserDefined { final_chars } => {
+                            let res = self.handle_userdefined(input, &final_chars);
+                            res
+                        }
+                        _ => unreachable!(),
+                    };
+                    // self.input_buf.clear();
+                }
                 let keyword_match = borrow.children.iter().find(|child| {
                     let node_val = &child.borrow().value;
                     if let NodeType::Keyword { short, .. } = node_val {
