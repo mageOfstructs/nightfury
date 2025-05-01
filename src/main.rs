@@ -7,10 +7,20 @@ use lib::*;
 
 fn main() {
     let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
-    let child =
-        TreeNode::new_keyword_with_parent("unsigned".to_string(), "u".to_string(), root.clone());
-    let child2 =
-        TreeNode::new_keyword_with_parent("signed".to_string(), "s".to_string(), root.clone());
+    let mut sign_token = NodeValue {
+        ntype: NodeType::Keyword {
+            short: String::from("u"),
+            expanded: String::from("unsigned"),
+        },
+        optional: true,
+    };
+    let child = TreeNode::new(sign_token.clone(), &root);
+    sign_token.ntype = NodeType::Keyword {
+        short: String::from("s"),
+        expanded: String::from("signed"),
+    };
+
+    let child2 = TreeNode::new(sign_token, &root);
     let types = TreeNode::new_required(NodeType::Null, &child);
 
     let int = TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
