@@ -11,6 +11,7 @@ fn main() {
         ntype: NodeType::Keyword {
             short: String::from("u"),
             expanded: String::from("unsigned"),
+            closing_token: None,
         },
         optional: true,
     };
@@ -18,6 +19,7 @@ fn main() {
     sign_token.ntype = NodeType::Keyword {
         short: String::from("s"),
         expanded: String::from("signed"),
+        closing_token: None,
     };
 
     let child2 = TreeNode::new(sign_token, &root);
@@ -35,10 +37,46 @@ fn main() {
         },
         &int,
     );
-    let child = TreeNode::new_required(NodeType::Null, &userdefined_node);
+    let null = TreeNode::new_required(NodeType::Null, &userdefined_node);
     float.borrow_mut().add_child(&userdefined_node);
 
-    root.borrow().dbg();
+    let expression = TreeNode::new(
+        NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::from("("),
+                expanded: String::from("("),
+                closing_token: Some(String::from(")")),
+            },
+            optional: false,
+        },
+        &root,
+    );
+    let expr_boolvar = TreeNode::new(
+        NodeValue {
+            ntype: NodeType::UserDefined {
+                final_chars: vec![')', '&', '('],
+            },
+            optional: false,
+        },
+        &expression,
+    );
+    expr_boolvar.borrow_mut().add_child(&null.clone());
+    let cond_and = TreeNode::new(
+        NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::from("&"),
+                expanded: String::from("&&"),
+                closing_token: None,
+            },
+            optional: false,
+        },
+        &expression,
+    );
+    cond_and.borrow_mut().add_child(&expr_boolvar);
+    expr_boolvar.borrow_mut().add_child(&cond_and);
+    expr_boolvar.borrow_mut().add_child(&expression);
+
+    // root.borrow().dbg();
     let mut cursor = TreeCursor::new(&root);
 
     let terminal = Term::stdout();
@@ -52,9 +90,9 @@ fn main() {
                 }
             }
         }
-        // if cursor.is_in_userdefined_stage() {
-        //     print!("{input}");
-        // }
+        if cursor.is_in_userdefined_stage() {
+            print!("{input}");
+        }
         std::io::stdout().flush();
     }
 }

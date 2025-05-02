@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use core::borrow;
 use std::cell::Ref;
 use std::cell::RefCell;
@@ -11,14 +13,32 @@ struct RootNode {
     children: Vec<TreeNode>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NodeType {
-    Keyword { short: String, expanded: String },
-    UserDefined { final_chars: Vec<char> },
+    Keyword {
+        short: String,
+        expanded: String,
+        closing_token: Option<String>,
+    },
+    UserDefined {
+        final_chars: Vec<char>,
+    },
     Null,
 }
 
-#[derive(Debug, Clone)]
+use NodeType::*;
+
+impl NodeType {
+    fn get_keyword_default() -> Self {
+        Self::Keyword {
+            short: String::new(),
+            expanded: String::new(),
+            closing_token: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct NodeValue {
     pub ntype: NodeType,
     pub optional: bool,
@@ -38,9 +58,10 @@ impl TreeNode {
     pub fn new_keyword(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             value: NodeValue {
-                ntype: NodeType::Keyword {
+                ntype: Keyword {
                     short: short_name,
                     expanded: expanded_name,
+                    closing_token: None,
                 },
                 optional: false,
             },
@@ -91,6 +112,7 @@ impl TreeNode {
                 ntype: NodeType::Keyword {
                     short: short_name,
                     expanded: expanded_name,
+                    closing_token: None,
                 },
                 optional: false,
             },
@@ -102,9 +124,11 @@ impl TreeNode {
     }
 }
 
+type InternalCursor = Weak<RefCell<TreeNode>>;
 pub struct TreeCursor {
-    cur_ast_pos: Weak<RefCell<TreeNode>>,
+    cur_ast_pos: InternalCursor,
     input_buf: String,
+    unfinished_nodes: Vec<InternalCursor>,
 }
 
 impl TreeCursor {
@@ -112,6 +136,7 @@ impl TreeCursor {
         Self {
             cur_ast_pos: Rc::downgrade(ast_root),
             input_buf: String::new(),
+            unfinished_nodes: Vec::new(),
         }
     }
     fn handle_userdefined(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
@@ -120,8 +145,22 @@ impl TreeCursor {
             let strong_ref = self.get_cur_ast_binding();
             let borrow = strong_ref.borrow();
             let next_node = Rc::clone(&borrow.children[child_idx]);
-            self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
-            let ret = Some(self.input_buf.clone());
+            self.update_cursor(&next_node);
+            let ret = if let NodeValue {
+                ntype:
+                    NodeType::Keyword {
+                        short,
+                        expanded,
+                        closing_token: None,
+                    },
+                ..
+            } = &next_node.borrow().value
+                && *short == String::from(input)
+            {
+                Some(expanded.clone())
+            } else {
+                Some(String::from(final_chars[child_idx]))
+            };
             self.input_buf.clear();
             ret
         } else {
@@ -218,7 +257,7 @@ impl TreeCursor {
             _ => {
                 let res = self.search_rec(&binding);
                 if let Some(node) = res {
-                    self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
+                    self.update_cursor(&node);
                     return match &node.borrow().value {
                         NodeValue {
                             ntype: NodeType::Keyword { expanded, .. },
@@ -236,11 +275,27 @@ impl TreeCursor {
                         }
                         _ => unreachable!(),
                     };
-                    // self.input_buf.clear();
                 }
             }
         }
         None
+    }
+
+    fn update_cursor(&mut self, node: &Rc<RefCell<TreeNode>>) {
+        self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
+        if let NodeValue {
+            ntype:
+                NodeType::Keyword {
+                    closing_token: Some(_),
+                    ..
+                },
+            ..
+        } = &node.borrow().value
+        {
+            self.unfinished_nodes.push(Rc::downgrade(&node));
+        } else if node.borrow().children.is_empty() && !self.unfinished_nodes.is_empty() {
+            self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
+        }
     }
     fn dump(&self) {
         println!(
@@ -270,6 +325,10 @@ impl TreeCursor {
             false
         }
     }
+
+    fn get_current_nodeval(&self) -> NodeValue {
+        self.get_cur_ast_binding().borrow().value.clone()
+    }
 }
 
 #[cfg(test)]
@@ -296,14 +355,32 @@ mod tests {
         let second =
             TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), root.clone());
         TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), second.clone());
-        let mut cursor = TreeCursor {
-            cur_ast_pos: Rc::downgrade(&root),
-            input_buf: String::new(),
-        };
-        assert_eq!(cursor.get_last_matched_node(), "BEGIN");
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!(cursor.get_current_nodeval(), NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::new(),
+                expanded: String::from("BEGIN"),
+                closing_token: None
+            },
+            optional: false
+        });
         cursor.advance('i').unwrap();
-        assert_eq!(cursor.get_last_matched_node(), "int");
+        assert_eq!(cursor.get_current_nodeval(), NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::from("i"),
+                expanded: String::from("int"),
+                closing_token: None
+            },
+            optional: false
+        });
         cursor.advance('a').unwrap();
-        assert_eq!(cursor.get_last_matched_node(), "asdf");
+        assert_eq!(cursor.get_current_nodeval(), NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::from("a"),
+                expanded: String::from("asdf"),
+                closing_token: None
+            },
+            optional: false
+        });
     }
 }
