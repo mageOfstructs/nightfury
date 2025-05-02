@@ -293,9 +293,11 @@ impl TreeCursor {
         } = &node.borrow().value
         {
             self.unfinished_nodes.push(Rc::downgrade(&node));
-        } else if node.borrow().children.is_empty() && !self.unfinished_nodes.is_empty() {
+        } else if node.borrow().children.is_empty() && self.unfinished_nodes.len() > 1 {
+            // we don't need to jump back if only one remains
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
         }
+        println!("{:?}", self.get_cur_ast_binding().borrow().value);
     }
     fn dump(&self) {
         println!(
