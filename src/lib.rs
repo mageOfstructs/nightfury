@@ -44,7 +44,7 @@ pub struct NodeValue {
     pub optional: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TreeNode {
     value: NodeValue,
     parent: Option<Rc<RefCell<TreeNode>>>,
@@ -121,6 +121,77 @@ impl TreeNode {
         }));
         parent.borrow_mut().children.push(Rc::clone(&ret));
         ret
+    }
+    fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
+        for child in &self.children {
+            if let Keyword { short: nshort, .. } = &child.borrow().value.ntype
+                && nshort == short
+            {
+                return Some(Rc::clone(&child));
+            }
+        }
+        for child in &self.children {
+            let rec_res = child.borrow().find_node_with_code(short);
+            if rec_res.is_some() {
+                return rec_res;
+            }
+        }
+        None
+    }
+
+    fn check_for_conflicts(&self, short: &str) -> bool {
+        for child in &self.children {
+            let borrow = child.borrow();
+            match &borrow.value.ntype {
+                Keyword { short: nshort, .. } if nshort == short => return true,
+                Null => {
+                    let rec_res = borrow.check_for_conflicts(short);
+                    if rec_res {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
+        for child in &self.children {
+            let borrow = child.borrow();
+            match &borrow.value.ntype {
+                Keyword { short: nshort, .. } if nshort == short => return Some(Rc::clone(&child)),
+                Null => {
+                    let rec_res = borrow.get_conflicting_node(short);
+                    if rec_res.is_some() {
+                        return rec_res;
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+    fn handle_potential_conflict(&self, child: &Rc<RefCell<TreeNode>>) {
+        if let Keyword {
+            short,
+            expanded,
+            closing_token,
+        } = &child.borrow().value.ntype
+        {
+            if let Keyword { short: sshort, .. } = &self.value.ntype
+                && self.value.optional
+                && short == sshort
+            {
+                let mut longer_child: TreeNode = child.borrow().clone();
+                longer_child.value.ntype = Keyword {
+                    short: "TODO".to_string(),
+                    expanded: expanded.to_string(),
+                    closing_token: closing_token.clone(),
+                }
+            }
+            if let Some(node) = self.get_conflicting_node(short) {}
+        }
     }
 }
 
