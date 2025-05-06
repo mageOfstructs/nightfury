@@ -434,31 +434,74 @@ mod tests {
             TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), root.clone());
         TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), second.clone());
         let mut cursor = TreeCursor::new(&root);
-        assert_eq!(cursor.get_current_nodeval(), NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::new(),
-                expanded: String::from("BEGIN"),
-                closing_token: None
-            },
-            optional: false
-        });
+        assert_eq!(
+            cursor.get_current_nodeval(),
+            NodeValue {
+                ntype: NodeType::Keyword {
+                    short: String::new(),
+                    expanded: String::from("BEGIN"),
+                    closing_token: None
+                },
+                optional: false
+            }
+        );
         cursor.advance('i').unwrap();
-        assert_eq!(cursor.get_current_nodeval(), NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::from("i"),
-                expanded: String::from("int"),
-                closing_token: None
-            },
-            optional: false
-        });
+        assert_eq!(
+            cursor.get_current_nodeval(),
+            NodeValue {
+                ntype: NodeType::Keyword {
+                    short: String::from("i"),
+                    expanded: String::from("int"),
+                    closing_token: None
+                },
+                optional: false
+            }
+        );
         cursor.advance('a').unwrap();
-        assert_eq!(cursor.get_current_nodeval(), NodeValue {
+        assert_eq!(
+            cursor.get_current_nodeval(),
+            NodeValue {
+                ntype: NodeType::Keyword {
+                    short: String::from("a"),
+                    expanded: String::from("asdf"),
+                    closing_token: None
+                },
+                optional: false
+            }
+        );
+    }
+
+    #[test]
+    fn test_conflict_check() {
+        let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
+        let mut sign_token = NodeValue {
             ntype: NodeType::Keyword {
-                short: String::from("a"),
-                expanded: String::from("asdf"),
-                closing_token: None
+                short: String::from("u"),
+                expanded: String::from("unsigned"),
+                closing_token: None,
             },
-            optional: false
-        });
+            optional: true,
+        };
+        let child = TreeNode::new(sign_token.clone(), &root);
+        sign_token.ntype = NodeType::Keyword {
+            short: String::from("s"),
+            expanded: String::from("signed"),
+            closing_token: None,
+        };
+
+        let child2 = TreeNode::new(sign_token, &root);
+        let types = TreeNode::new_required(NodeType::Null, &child);
+
+        let int =
+            TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
+        let float =
+            TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
+        child.borrow_mut().add_child(&types);
+        child2.borrow_mut().add_child(&types);
+
+        assert!(root.borrow().check_for_conflicts("s"));
+        assert!(child2.borrow().check_for_conflicts("s"));
+        assert!(types.borrow().check_for_conflicts("s"));
+        assert!(!int.borrow().check_for_conflicts("s"));
     }
 }
