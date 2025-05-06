@@ -240,6 +240,8 @@ impl TreeNode {
                 };
                 // FIXME: this only handles the case where only one optional is possible, as seen
                 // in main, by entering unsigned one still has to press 'sh' instead of only 's'
+                // Fix this by completely removing this part and changing the matching algorithm to
+                // also accept partial matches (but only if there is only one)
                 self.children.push(Rc::new(RefCell::new(shorter_child)));
                 self.value.ntype = Keyword {
                     short: NameShortener::expand(Some(sshort), &sexpanded),
