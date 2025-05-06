@@ -238,6 +238,8 @@ impl TreeNode {
                     expanded: cexpanded.to_string(),
                     closing_token: cclosing_token.clone(),
                 };
+                // FIXME: this only handles the case where only one optional is possible, as seen
+                // in main, by entering unsigned one still has to press 'sh' instead of only 's'
                 self.children.push(Rc::new(RefCell::new(shorter_child)));
                 self.value.ntype = Keyword {
                     short: NameShortener::expand(Some(sshort), &sexpanded),
