@@ -402,6 +402,11 @@ impl TreeCursor {
     fn get_current_nodeval(&self) -> NodeValue {
         self.get_cur_ast_binding().borrow().value.clone()
     }
+    fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
+        let binding = self.get_cur_ast_binding();
+        let binding = binding.borrow();
+        binding.find_node_with_code(short)
+    }
 }
 
 #[cfg(test)]
