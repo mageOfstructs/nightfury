@@ -3,10 +3,26 @@
 use core::borrow;
 use std::cell::Ref;
 use std::cell::RefCell;
+use std::cell::RefMut;
 use std::rc::{Rc, Weak};
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
+}
+
+struct NameShortener;
+impl NameShortener {
+    fn expand(old: Option<&str>, full: &str) -> String {
+        let ret = if let Some(old) = old {
+            let mut ret = old.to_string();
+            ret.push_str(&full[old.len()..old.len() + 1]);
+            ret
+        } else {
+            full[0..1].to_string()
+        };
+        println!("Got {} instead of {old:?}", ret);
+        ret
+    }
 }
 
 struct RootNode {
@@ -53,6 +69,7 @@ pub struct TreeNode {
 
 impl TreeNode {
     pub fn add_child(&mut self, child: &Rc<RefCell<TreeNode>>) {
+        self.handle_potential_conflict(child);
         self.children.push(Rc::clone(&child));
     }
     pub fn new_keyword(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
@@ -172,25 +189,108 @@ impl TreeNode {
         }
         None
     }
-    fn handle_potential_conflict(&self, child: &Rc<RefCell<TreeNode>>) {
+    fn handle_potential_conflict_internal(&mut self, mut_child: &mut RefMut<'_, TreeNode>) {
         if let Keyword {
-            short,
-            expanded,
-            closing_token,
-        } = &child.borrow().value.ntype
+            short: cshort,
+            expanded: cexpanded,
+            closing_token: cclosing_token,
+        } = &mut_child.value.ntype
         {
             if let Keyword { short: sshort, .. } = &self.value.ntype
                 && self.value.optional
-                && short == sshort
+                && cshort == sshort
             {
-                let mut longer_child: TreeNode = child.borrow().clone();
-                longer_child.value.ntype = Keyword {
-                    short: "TODO".to_string(),
-                    expanded: expanded.to_string(),
-                    closing_token: closing_token.clone(),
+                let mut shorter_child: TreeNode = (*mut_child).clone();
+                shorter_child.value.ntype = Keyword {
+                    short: cshort.to_string(),
+                    expanded: cexpanded.to_string(),
+                    closing_token: cclosing_token.clone(),
+                };
+                mut_child.value.ntype = Keyword {
+                    short: NameShortener::expand(Some(cshort), &cexpanded),
+                    expanded: cexpanded.clone(),
+                    closing_token: cclosing_token.clone(),
+                };
+                self.children.push(Rc::new(RefCell::new(shorter_child)));
+            } else if let Some(node) = self.get_conflicting_node(cshort) {
+                let mut mut_binding = node.borrow_mut();
+                if let Keyword {
+                    short,
+                    expanded,
+                    closing_token,
+                } = &mut_binding.value.ntype
+                {
+                    let new_short = NameShortener::expand(Some(short), expanded);
+                    // awful string copy below
+                    mut_binding.value.ntype = Keyword {
+                        short: new_short,
+                        expanded: expanded.clone(),
+                        closing_token: closing_token.clone(),
+                    };
+                    mut_child.value.ntype = Keyword {
+                        short: NameShortener::expand(Some(cshort), &cexpanded),
+                        expanded: cexpanded.clone(),
+                        closing_token: cclosing_token.clone(),
+                    };
+                } else {
+                    panic!(
+                        "What?! We got a non-keyword node from the get_conflicting_node fn! Anyways, I'm gonna snuggle some foxxos now..."
+                    )
                 }
             }
-            if let Some(node) = self.get_conflicting_node(short) {}
+        }
+    }
+    fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) {
+        let mut mut_child = child.borrow_mut();
+        // TODO: if child is Null, repeat this for every child of that child
+        if let Keyword {
+            short: cshort,
+            expanded: cexpanded,
+            closing_token: cclosing_token,
+        } = &mut_child.value.ntype
+        {
+            if let Keyword { short: sshort, .. } = &self.value.ntype
+                && self.value.optional
+                && cshort == sshort
+            {
+                let mut shorter_child: TreeNode = child.borrow().clone();
+                shorter_child.value.ntype = Keyword {
+                    short: cshort.to_string(),
+                    expanded: cexpanded.to_string(),
+                    closing_token: cclosing_token.clone(),
+                };
+                mut_child.value.ntype = Keyword {
+                    short: NameShortener::expand(Some(cshort), &cexpanded),
+                    expanded: cexpanded.clone(),
+                    closing_token: cclosing_token.clone(),
+                };
+                self.children.push(Rc::new(RefCell::new(shorter_child)));
+            } else if let Some(node) = self.get_conflicting_node(cshort) {
+                let mut mut_binding = node.borrow_mut();
+                if let Keyword {
+                    short,
+                    expanded,
+                    closing_token,
+                } = &mut_binding.value.ntype
+                {
+                    let new_short = NameShortener::expand(Some(short), expanded);
+                    // awful string copy below
+                    mut_binding.value.ntype = Keyword {
+                        short: new_short,
+                        expanded: expanded.clone(),
+                        closing_token: closing_token.clone(),
+                    };
+                    mut_child.value.ntype = Keyword {
+                        short: NameShortener::expand(Some(cshort), &cexpanded),
+                        expanded: cexpanded.clone(),
+                        closing_token: cclosing_token.clone(),
+                    };
+                } else {
+                    panic!(
+                        "What?! We got a non-keyword node from the get_conflicting_node fn! Anyways, I'm gonna snuggle some foxxos now..."
+                    )
+                }
+            }
         }
     }
 }
@@ -434,41 +534,32 @@ mod tests {
             TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), root.clone());
         TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), second.clone());
         let mut cursor = TreeCursor::new(&root);
-        assert_eq!(
-            cursor.get_current_nodeval(),
-            NodeValue {
-                ntype: NodeType::Keyword {
-                    short: String::new(),
-                    expanded: String::from("BEGIN"),
-                    closing_token: None
-                },
-                optional: false
-            }
-        );
+        assert_eq!(cursor.get_current_nodeval(), NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::new(),
+                expanded: String::from("BEGIN"),
+                closing_token: None
+            },
+            optional: false
+        });
         cursor.advance('i').unwrap();
-        assert_eq!(
-            cursor.get_current_nodeval(),
-            NodeValue {
-                ntype: NodeType::Keyword {
-                    short: String::from("i"),
-                    expanded: String::from("int"),
-                    closing_token: None
-                },
-                optional: false
-            }
-        );
+        assert_eq!(cursor.get_current_nodeval(), NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::from("i"),
+                expanded: String::from("int"),
+                closing_token: None
+            },
+            optional: false
+        });
         cursor.advance('a').unwrap();
-        assert_eq!(
-            cursor.get_current_nodeval(),
-            NodeValue {
-                ntype: NodeType::Keyword {
-                    short: String::from("a"),
-                    expanded: String::from("asdf"),
-                    closing_token: None
-                },
-                optional: false
-            }
-        );
+        assert_eq!(cursor.get_current_nodeval(), NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::from("a"),
+                expanded: String::from("asdf"),
+                closing_token: None
+            },
+            optional: false
+        });
     }
 
     #[test]
