@@ -13,7 +13,7 @@ fn main() {
             expanded: String::from("unsigned"),
             closing_token: None,
         },
-        optional: true,
+        optional: false,
     };
     let child = TreeNode::new(sign_token.clone(), &root);
     sign_token.ntype = NodeType::Keyword {
@@ -28,8 +28,6 @@ fn main() {
     let int = TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
     let float =
         TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
-    child.borrow_mut().add_child(&types);
-    child2.borrow_mut().add_child(&types);
 
     let userdefined_node = TreeNode::new_required(
         NodeType::UserDefined {
@@ -39,6 +37,9 @@ fn main() {
     );
     let null = TreeNode::new_required(NodeType::Null, &userdefined_node);
     float.borrow_mut().add_child(&userdefined_node);
+
+    child2.borrow_mut().add_child(&types);
+    root.borrow_mut().add_child(&types);
 
     let expression = TreeNode::new(
         NodeValue {

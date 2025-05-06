@@ -60,7 +60,7 @@ pub struct NodeValue {
     pub optional: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TreeNode {
     value: NodeValue,
     parent: Option<Rc<RefCell<TreeNode>>>,
@@ -189,30 +189,18 @@ impl TreeNode {
         }
         None
     }
-    fn handle_potential_conflict_internal(&mut self, mut_child: &mut RefMut<'_, TreeNode>) {
+    fn handle_potential_conflict_internal(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
+        let child_borrow = child.borrow();
+        let mut ret = false;
         if let Keyword {
             short: cshort,
             expanded: cexpanded,
             closing_token: cclosing_token,
-        } = &mut_child.value.ntype
+        } = &child_borrow.value.ntype
         {
-            if let Keyword { short: sshort, .. } = &self.value.ntype
-                && self.value.optional
-                && cshort == sshort
+            if let Some(node) = self.get_conflicting_node(cshort)
+                && node.borrow().value != child_borrow.value
             {
-                let mut shorter_child: TreeNode = (*mut_child).clone();
-                shorter_child.value.ntype = Keyword {
-                    short: cshort.to_string(),
-                    expanded: cexpanded.to_string(),
-                    closing_token: cclosing_token.clone(),
-                };
-                mut_child.value.ntype = Keyword {
-                    short: NameShortener::expand(Some(cshort), &cexpanded),
-                    expanded: cexpanded.clone(),
-                    closing_token: cclosing_token.clone(),
-                };
-                self.children.push(Rc::new(RefCell::new(shorter_child)));
-            } else if let Some(node) = self.get_conflicting_node(cshort) {
                 let mut mut_binding = node.borrow_mut();
                 if let Keyword {
                     short,
@@ -227,70 +215,75 @@ impl TreeNode {
                         expanded: expanded.clone(),
                         closing_token: closing_token.clone(),
                     };
-                    mut_child.value.ntype = Keyword {
-                        short: NameShortener::expand(Some(cshort), &cexpanded),
-                        expanded: cexpanded.clone(),
-                        closing_token: cclosing_token.clone(),
-                    };
+                    println!("2");
+                    ret = true;
                 } else {
                     panic!(
                         "What?! We got a non-keyword node from the get_conflicting_node fn! Anyways, I'm gonna snuggle some foxxos now..."
                     )
                 }
+            }
+            println!("{} == {:?}", cshort, self.value.ntype);
+            if let Keyword {
+                short: sshort,
+                expanded: sexpanded,
+                closing_token: sclosing_token,
+            } = &self.value.ntype
+            // && self.value.optional
+            && cshort == sshort
+            {
+                let mut shorter_child: TreeNode = (*child_borrow).clone();
+                shorter_child.value.ntype = Keyword {
+                    short: cshort.to_string(),
+                    expanded: cexpanded.to_string(),
+                    closing_token: cclosing_token.clone(),
+                };
+                self.children.push(Rc::new(RefCell::new(shorter_child)));
+                self.value.ntype = Keyword {
+                    short: NameShortener::expand(Some(sshort), &sexpanded),
+                    expanded: sexpanded.clone(),
+                    closing_token: sclosing_token.clone(),
+                };
+                println!("1");
+                ret = true;
             }
         }
+        ret
     }
     fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) {
-        let mut mut_child = child.borrow_mut();
+        let child_borrow = child.borrow();
         // TODO: if child is Null, repeat this for every child of that child
         if let Keyword {
-            short: cshort,
-            expanded: cexpanded,
-            closing_token: cclosing_token,
-        } = &mut_child.value.ntype
+            short,
+            expanded,
+            closing_token,
+        } = &child_borrow.value.ntype
         {
-            if let Keyword { short: sshort, .. } = &self.value.ntype
-                && self.value.optional
-                && cshort == sshort
-            {
-                let mut shorter_child: TreeNode = child.borrow().clone();
-                shorter_child.value.ntype = Keyword {
-                    short: cshort.to_string(),
-                    expanded: cexpanded.to_string(),
-                    closing_token: cclosing_token.clone(),
+            if self.handle_potential_conflict_internal(child) {
+                child.borrow_mut().value.ntype = Keyword {
+                    short: NameShortener::expand(Some(short), &expanded),
+                    expanded: expanded.clone(),
+                    closing_token: closing_token.clone(),
                 };
-                mut_child.value.ntype = Keyword {
-                    short: NameShortener::expand(Some(cshort), &cexpanded),
-                    expanded: cexpanded.clone(),
-                    closing_token: cclosing_token.clone(),
-                };
-                self.children.push(Rc::new(RefCell::new(shorter_child)));
-            } else if let Some(node) = self.get_conflicting_node(cshort) {
-                let mut mut_binding = node.borrow_mut();
-                if let Keyword {
-                    short,
-                    expanded,
-                    closing_token,
-                } = &mut_binding.value.ntype
-                {
-                    let new_short = NameShortener::expand(Some(short), expanded);
-                    // awful string copy below
-                    mut_binding.value.ntype = Keyword {
-                        short: new_short,
-                        expanded: expanded.clone(),
-                        closing_token: closing_token.clone(),
-                    };
-                    mut_child.value.ntype = Keyword {
-                        short: NameShortener::expand(Some(cshort), &cexpanded),
-                        expanded: cexpanded.clone(),
-                        closing_token: cclosing_token.clone(),
-                    };
-                } else {
-                    panic!(
-                        "What?! We got a non-keyword node from the get_conflicting_node fn! Anyways, I'm gonna snuggle some foxxos now..."
-                    )
-                }
             }
+        } else if let Null = &child_borrow.value.ntype {
+            child_borrow.children.iter().for_each(|child| {
+                if self.handle_potential_conflict_internal(child) {
+                    let mut mut_child = child.borrow_mut();
+                    if let Keyword {
+                        short,
+                        expanded,
+                        closing_token,
+                    } = &mut_child.value.ntype
+                    {
+                        mut_child.value.ntype = Keyword {
+                            short: NameShortener::expand(Some(short), &expanded),
+                            expanded: expanded.clone(),
+                            closing_token: closing_token.clone(),
+                        };
+                    }
+                }
+            });
         }
     }
 }
