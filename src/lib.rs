@@ -6,10 +6,6 @@ use std::cell::RefCell;
 use std::cell::RefMut;
 use std::rc::{Rc, Weak};
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
 struct NameShortener;
 impl NameShortener {
     fn expand(old: Option<&str>, full: &str) -> String {
@@ -491,12 +487,6 @@ impl TreeCursor {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
 
     #[test]
     fn simple_tree() {
