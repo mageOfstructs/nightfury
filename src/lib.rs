@@ -223,34 +223,34 @@ impl TreeNode {
                     )
                 }
             }
-            println!("{} == {:?}", cshort, self.value.ntype);
-            if let Keyword {
-                short: sshort,
-                expanded: sexpanded,
-                closing_token: sclosing_token,
-            } = &self.value.ntype
-            // && self.value.optional
-            && cshort == sshort
-            {
-                let mut shorter_child: TreeNode = (*child_borrow).clone();
-                shorter_child.value.ntype = Keyword {
-                    short: cshort.to_string(),
-                    expanded: cexpanded.to_string(),
-                    closing_token: cclosing_token.clone(),
-                };
-                // FIXME: this only handles the case where only one optional is possible, as seen
-                // in main, by entering unsigned one still has to press 'sh' instead of only 's'
-                // Fix this by completely removing this part and changing the matching algorithm to
-                // also accept partial matches (but only if there is only one)
-                self.children.push(Rc::new(RefCell::new(shorter_child)));
-                self.value.ntype = Keyword {
-                    short: NameShortener::expand(Some(sshort), &sexpanded),
-                    expanded: sexpanded.clone(),
-                    closing_token: sclosing_token.clone(),
-                };
-                println!("1");
-                ret = true;
-            }
+            // println!("{} == {:?}", cshort, self.value.ntype);
+            // if let Keyword {
+            //     short: sshort,
+            //     expanded: sexpanded,
+            //     closing_token: sclosing_token,
+            // } = &self.value.ntype
+            // // && self.value.optional
+            // && cshort == sshort
+            // {
+            //     let mut shorter_child: TreeNode = (*child_borrow).clone();
+            //     shorter_child.value.ntype = Keyword {
+            //         short: cshort.to_string(),
+            //         expanded: cexpanded.to_string(),
+            //         closing_token: cclosing_token.clone(),
+            //     };
+            //     // FIXME: this only handles the case where only one optional is possible, as seen
+            //     // in main, by entering unsigned one still has to press 'sh' instead of only 's'
+            //     // Fix this by completely removing this part and changing the matching algorithm to
+            //     // also accept partial matches (but only if there is only one)
+            //     self.children.push(Rc::new(RefCell::new(shorter_child)));
+            //     self.value.ntype = Keyword {
+            //         short: NameShortener::expand(Some(sshort), &sexpanded),
+            //         expanded: sexpanded.clone(),
+            //         closing_token: sclosing_token.clone(),
+            //     };
+            //     println!("1");
+            //     ret = true;
+            // }
         }
         ret
     }
@@ -393,26 +393,6 @@ impl TreeCursor {
         let borrow = binding.borrow();
         self.input_buf.push(input);
         match &borrow.value {
-            // NodeType::Null | NodeType::Keyword { .. } => {}
-            // NodeType::Keyword { expanded, .. } => {
-            //     self.input_buf.push(input);
-            //     let possibly_next_node = borrow.children.iter().find(|child| {
-            //         if let NodeType::Keyword { short, .. } = &child.borrow().value {
-            //             *short == self.input_buf
-            //         } else {
-            //             false
-            //         }
-            //     });
-            //     if let Some(NodeType::Keyword { expanded, .. }) =
-            //         possibly_next_node.and_then(|res| Some(res.borrow().value.clone()))
-            //     {
-            //         let next_node = Rc::clone(&possibly_next_node.unwrap());
-            //         println!("{:?}", next_node.borrow().value);
-            //         self.cur_ast_pos = Rc::downgrade(&Rc::clone(&next_node));
-            //         self.input_buf.clear();
-            //         return Some(expanded);
-            //     }
-            // }
             NodeValue {
                 ntype: NodeType::UserDefined { final_chars, .. },
                 ..
@@ -531,32 +511,41 @@ mod tests {
             TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), root.clone());
         TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), second.clone());
         let mut cursor = TreeCursor::new(&root);
-        assert_eq!(cursor.get_current_nodeval(), NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::new(),
-                expanded: String::from("BEGIN"),
-                closing_token: None
-            },
-            optional: false
-        });
+        assert_eq!(
+            cursor.get_current_nodeval(),
+            NodeValue {
+                ntype: NodeType::Keyword {
+                    short: String::new(),
+                    expanded: String::from("BEGIN"),
+                    closing_token: None
+                },
+                optional: false
+            }
+        );
         cursor.advance('i').unwrap();
-        assert_eq!(cursor.get_current_nodeval(), NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::from("i"),
-                expanded: String::from("int"),
-                closing_token: None
-            },
-            optional: false
-        });
+        assert_eq!(
+            cursor.get_current_nodeval(),
+            NodeValue {
+                ntype: NodeType::Keyword {
+                    short: String::from("i"),
+                    expanded: String::from("int"),
+                    closing_token: None
+                },
+                optional: false
+            }
+        );
         cursor.advance('a').unwrap();
-        assert_eq!(cursor.get_current_nodeval(), NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::from("a"),
-                expanded: String::from("asdf"),
-                closing_token: None
-            },
-            optional: false
-        });
+        assert_eq!(
+            cursor.get_current_nodeval(),
+            NodeValue {
+                ntype: NodeType::Keyword {
+                    short: String::from("a"),
+                    expanded: String::from("asdf"),
+                    closing_token: None
+                },
+                optional: false
+            }
+        );
     }
 
     #[test]
