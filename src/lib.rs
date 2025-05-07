@@ -583,4 +583,40 @@ mod tests {
         assert!(types.borrow().check_for_conflicts("s"));
         assert!(!int.borrow().check_for_conflicts("s"));
     }
+
+    #[test]
+    fn test_keyword_matching() {
+        let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
+        let mut sign_token = NodeValue {
+            ntype: NodeType::Keyword {
+                short: String::from("u"),
+                expanded: String::from("unsigned"),
+                closing_token: None,
+            },
+            optional: false,
+        };
+        let child = TreeNode::new(sign_token.clone(), &root);
+        sign_token.ntype = NodeType::Keyword {
+            short: String::from("s"),
+            expanded: String::from("signed"),
+            closing_token: None,
+        };
+
+        let child2 = TreeNode::new(sign_token, &root);
+        let types = TreeNode::new_required(NodeType::Null, &child);
+
+        let int =
+            TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
+        let float =
+            TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
+        root.borrow_mut().add_child(&types);
+        child2.borrow_mut().add_child(&types);
+
+        let mut cursor = TreeCursor::new(&root);
+        assert!(cursor.advance('s').is_none());
+        assert!(cursor.advance('h').is_some());
+        let mut cursor = TreeCursor::new(&root);
+        assert!(cursor.advance('u').is_some());
+        assert!(cursor.advance('s').is_some());
+    }
 }
