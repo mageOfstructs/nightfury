@@ -344,30 +344,32 @@ impl TreeCursor {
         let binding = treenode;
         let borrow = binding.borrow();
         let mut keyword_match = None;
+        let mut potential_matches = 0;
         for child in &borrow.children {
             let node_val = &child.borrow().value;
             match node_val {
                 NodeValue {
                     ntype: NodeType::Keyword { short, .. },
                     ..
-                } if self.input_buf == *short => {
+                } if short.starts_with(&self.input_buf) => {
                     keyword_match = Some(child.clone());
-                    break;
+                    potential_matches += 1;
                 }
                 NodeValue {
                     ntype: NodeType::Null,
                     ..
                 }
                 | NodeValue { optional: true, .. } => {
-                    keyword_match = self.search_rec(&child);
-                    if keyword_match.is_some() {
-                        break;
+                    let rec_res = self.search_rec(&child);
+                    if rec_res.is_some() {
+                        potential_matches += 1;
+                        keyword_match = rec_res;
                     }
                 }
                 _ => {}
             }
         }
-        if keyword_match.is_some() {
+        if keyword_match.is_some() && potential_matches == 1 {
             return keyword_match;
         }
 
