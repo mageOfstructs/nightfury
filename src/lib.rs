@@ -1,9 +1,6 @@
 #![feature(let_chains)]
 
-use core::borrow;
-use std::cell::Ref;
 use std::cell::RefCell;
-use std::cell::RefMut;
 use std::rc::{Rc, Weak};
 
 struct NameShortener;
@@ -19,10 +16,6 @@ impl NameShortener {
         println!("Got {} instead of {old:?}", ret);
         ret
     }
-}
-
-struct RootNode {
-    children: Vec<TreeNode>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

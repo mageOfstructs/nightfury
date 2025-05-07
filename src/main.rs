@@ -1,6 +1,6 @@
 #![feature(let_chains)]
 
-use std::io::{Read, Write};
+use std::io::Write;
 
 use console::Term;
 use lib::*;
