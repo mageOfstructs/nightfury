@@ -219,40 +219,11 @@ impl TreeNode {
                     )
                 }
             }
-            // println!("{} == {:?}", cshort, self.value.ntype);
-            // if let Keyword {
-            //     short: sshort,
-            //     expanded: sexpanded,
-            //     closing_token: sclosing_token,
-            // } = &self.value.ntype
-            // // && self.value.optional
-            // && cshort == sshort
-            // {
-            //     let mut shorter_child: TreeNode = (*child_borrow).clone();
-            //     shorter_child.value.ntype = Keyword {
-            //         short: cshort.to_string(),
-            //         expanded: cexpanded.to_string(),
-            //         closing_token: cclosing_token.clone(),
-            //     };
-            //     // FIXME: this only handles the case where only one optional is possible, as seen
-            //     // in main, by entering unsigned one still has to press 'sh' instead of only 's'
-            //     // Fix this by completely removing this part and changing the matching algorithm to
-            //     // also accept partial matches (but only if there is only one)
-            //     self.children.push(Rc::new(RefCell::new(shorter_child)));
-            //     self.value.ntype = Keyword {
-            //         short: NameShortener::expand(Some(sshort), &sexpanded),
-            //         expanded: sexpanded.clone(),
-            //         closing_token: sclosing_token.clone(),
-            //     };
-            //     println!("1");
-            //     ret = true;
-            // }
         }
         ret
     }
     fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) {
         let child_borrow = child.borrow();
-        // TODO: if child is Null, repeat this for every child of that child
         if let Keyword {
             short,
             expanded,
