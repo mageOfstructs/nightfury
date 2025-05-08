@@ -514,24 +514,22 @@ mod tests {
 
     #[test]
     fn simple_tree() {
-        let root = TreeNode::new_keyword("int".to_string(), "i".to_string());
-        let _other =
-            TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), root.clone());
+        let root = TreeNode::new_keyword("int".to_string());
+        let _other = TreeNode::new_keyword_with_parent("asdf".to_string(), root.clone());
         assert_eq!(root.borrow().children.len(), 1);
     }
 
     #[test]
     fn simple_cursor_steps() {
-        let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
-        let second =
-            TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), root.clone());
-        TreeNode::new_keyword_with_parent("asdf".to_string(), "a".to_string(), second.clone());
+        let root = TreeNode::new_keyword("BEGIN".to_string());
+        let second = TreeNode::new_keyword_with_parent("int".to_string(), root.clone());
+        TreeNode::new_keyword_with_parent("asdf".to_string(), second.clone());
         let mut cursor = TreeCursor::new(&root);
         assert_eq!(
             cursor.get_current_nodeval(),
             NodeValue {
                 ntype: NodeType::Keyword {
-                    short: String::new(),
+                    short: String::from("B"),
                     expanded: String::from("BEGIN"),
                     closing_token: None
                 },
@@ -566,7 +564,7 @@ mod tests {
 
     #[test]
     fn test_conflict_check() {
-        let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
+        let root = TreeNode::new_keyword("BEGIN".to_string());
         let mut sign_token = NodeValue {
             ntype: NodeType::Keyword {
                 short: String::from("u"),
@@ -585,10 +583,8 @@ mod tests {
         let child2 = TreeNode::new(sign_token, &root);
         let types = TreeNode::new_required(NodeType::Null, &child);
 
-        let int =
-            TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
-        let float =
-            TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
+        let int = TreeNode::new_keyword_with_parent("int".to_string(), types.clone());
+        let float = TreeNode::new_keyword_with_parent("short".to_string(), types.clone());
         child.borrow_mut().add_child(&types);
         child2.borrow_mut().add_child(&types);
 
@@ -600,7 +596,7 @@ mod tests {
 
     #[test]
     fn test_keyword_matching() {
-        let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
+        let root = TreeNode::new_keyword("BEGIN".to_string());
         let mut sign_token = NodeValue {
             ntype: NodeType::Keyword {
                 short: String::from("u"),
@@ -619,10 +615,8 @@ mod tests {
         let child2 = TreeNode::new(sign_token, &root);
         let types = TreeNode::new_required(NodeType::Null, &child);
 
-        let int =
-            TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
-        let float =
-            TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
+        let int = TreeNode::new_keyword_with_parent("int".to_string(), types.clone());
+        let float = TreeNode::new_keyword_with_parent("short".to_string(), types.clone());
         root.borrow_mut().add_child(&types);
         child2.borrow_mut().add_child(&types);
 
