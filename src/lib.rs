@@ -68,11 +68,11 @@ impl TreeNode {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
     }
-    pub fn new_keyword(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
+    pub fn new_keyword(expanded_name: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             value: NodeValue {
                 ntype: Keyword {
-                    short: short_name,
+                    short: expanded_name.chars().nth(0).unwrap().to_string(),
                     expanded: expanded_name,
                     closing_token: None,
                 },
@@ -117,13 +117,16 @@ impl TreeNode {
     }
     pub fn new_keyword_with_parent(
         expanded_name: String,
-        short_name: String,
         parent: Rc<RefCell<TreeNode>>,
     ) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
             value: NodeValue {
                 ntype: NodeType::Keyword {
-                    short: short_name,
+                    short: expanded_name
+                        .chars()
+                        .nth(0)
+                        .expect("Keyword must not be empty!")
+                        .to_string(),
                     expanded: expanded_name,
                     closing_token: None,
                 },

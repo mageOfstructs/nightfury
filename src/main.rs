@@ -6,7 +6,7 @@ use console::Term;
 use lib::*;
 
 fn main() {
-    let root = TreeNode::new_keyword("BEGIN".to_string(), String::new());
+    let root = TreeNode::new_keyword("BEGIN".to_string());
     let mut sign_token = NodeValue {
         ntype: NodeType::Keyword {
             short: String::from("u"),
@@ -25,11 +25,9 @@ fn main() {
     let signed = TreeNode::new(sign_token, &root);
     let types = TreeNode::new_required(NodeType::Null, &child);
 
-    let int = TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
-    let short =
-        TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
-    let short2 =
-        TreeNode::new_keyword_with_parent("shark".to_string(), "s".to_string(), types.clone());
+    let int = TreeNode::new_keyword_with_parent("int".to_string(), types.clone());
+    let short = TreeNode::new_keyword_with_parent("short".to_string(), types.clone());
+    let short2 = TreeNode::new_keyword_with_parent("shark".to_string(), types.clone());
     println!("a");
 
     let userdefined_node = TreeNode::new_required(
