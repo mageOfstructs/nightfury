@@ -3,10 +3,17 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+// ironic that this only expands names
 struct NameShortener;
 impl NameShortener {
     fn expand(old: Option<&str>, full: &str) -> String {
+        if full.is_empty() {
+            panic!("Cannot expand the void!")
+        }
         let ret = if let Some(old) = old {
+            if full.len() < old.len() {
+                panic!("NS: There is nothing left...")
+            }
             let mut ret = old.to_string();
             ret.push_str(&full[old.len()..old.len() + 1]);
             ret
