@@ -22,12 +22,15 @@ fn main() {
         closing_token: None,
     };
 
-    let child2 = TreeNode::new(sign_token, &root);
+    let signed = TreeNode::new(sign_token, &root);
     let types = TreeNode::new_required(NodeType::Null, &child);
 
     let int = TreeNode::new_keyword_with_parent("int".to_string(), "i".to_string(), types.clone());
-    let float =
+    let short =
         TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
+    let short2 =
+        TreeNode::new_keyword_with_parent("saph".to_string(), "s".to_string(), types.clone());
+    println!("a");
 
     let userdefined_node = TreeNode::new_required(
         NodeType::UserDefined {
@@ -36,9 +39,9 @@ fn main() {
         &int,
     );
     let null = TreeNode::new_required(NodeType::Null, &userdefined_node);
-    float.borrow_mut().add_child(&userdefined_node);
+    short.borrow_mut().add_child(&userdefined_node);
 
-    child2.borrow_mut().add_child(&types);
+    signed.borrow_mut().add_child(&types);
     root.borrow_mut().add_child(&types);
 
     let expression = TreeNode::new(
@@ -77,6 +80,8 @@ fn main() {
     expr_boolvar.borrow_mut().add_child(&cond_and);
     expr_boolvar.borrow_mut().add_child(&expression);
 
+    println!("Dump:");
+    signed.borrow().dump_children();
     // root.borrow().dbg();
     let mut cursor = TreeCursor::new(&root);
 
