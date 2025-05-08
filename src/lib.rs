@@ -68,6 +68,18 @@ impl TreeNode {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
     }
+    pub fn new_null(parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+        let ret = Rc::new(RefCell::new(Self {
+            value: NodeValue {
+                ntype: Null,
+                optional: false,
+            },
+            parent: Some(Rc::clone(parent)),
+            children: Vec::new(),
+        }));
+        parent.borrow_mut().children.push(Rc::clone(&ret));
+        ret
+    }
     pub fn new_keyword(expanded_name: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             value: NodeValue {
