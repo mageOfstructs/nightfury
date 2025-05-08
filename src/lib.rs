@@ -68,16 +68,23 @@ impl TreeNode {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
     }
-    pub fn new_null(parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+    pub fn new_null(parent: Option<&Rc<RefCell<TreeNode>>>) -> Rc<RefCell<Self>> {
+        let parent_ref = if let Some(parent) = parent {
+            Some(Rc::clone(parent))
+        } else {
+            None
+        };
         let ret = Rc::new(RefCell::new(Self {
             value: NodeValue {
                 ntype: Null,
                 optional: false,
             },
-            parent: Some(Rc::clone(parent)),
+            parent: parent_ref,
             children: Vec::new(),
         }));
-        parent.borrow_mut().children.push(Rc::clone(&ret));
+        if let Some(parent) = parent {
+            parent.borrow_mut().children.push(Rc::clone(&ret));
+        }
         ret
     }
     pub fn new_keyword(expanded_name: String) -> Rc<RefCell<Self>> {
@@ -521,18 +528,14 @@ mod tests {
 
     #[test]
     fn simple_cursor_steps() {
-        let root = TreeNode::new_keyword("BEGIN".to_string());
+        let root = TreeNode::new_null(None);
         let second = TreeNode::new_keyword_with_parent("int".to_string(), root.clone());
         TreeNode::new_keyword_with_parent("asdf".to_string(), second.clone());
         let mut cursor = TreeCursor::new(&root);
         assert_eq!(
             cursor.get_current_nodeval(),
             NodeValue {
-                ntype: NodeType::Keyword {
-                    short: String::from("B"),
-                    expanded: String::from("BEGIN"),
-                    closing_token: None
-                },
+                ntype: NodeType::Null,
                 optional: false
             }
         );
@@ -564,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_conflict_check() {
-        let root = TreeNode::new_keyword("BEGIN".to_string());
+        let root = TreeNode::new_null(None);
         let mut sign_token = NodeValue {
             ntype: NodeType::Keyword {
                 short: String::from("u"),
@@ -596,7 +599,7 @@ mod tests {
 
     #[test]
     fn test_keyword_matching() {
-        let root = TreeNode::new_keyword("BEGIN".to_string());
+        let root = TreeNode::new_null(None);
         let mut sign_token = NodeValue {
             ntype: NodeType::Keyword {
                 short: String::from("u"),

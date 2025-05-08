@@ -6,7 +6,7 @@ use console::Term;
 use lib::*;
 
 fn main() {
-    let root = TreeNode::new_keyword("BEGIN".to_string());
+    let root = TreeNode::new_null(None);
     let mut sign_token = NodeValue {
         ntype: NodeType::Keyword {
             short: String::from("u"),
