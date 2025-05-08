@@ -29,7 +29,7 @@ fn main() {
     let short =
         TreeNode::new_keyword_with_parent("short".to_string(), "s".to_string(), types.clone());
     let short2 =
-        TreeNode::new_keyword_with_parent("saph".to_string(), "s".to_string(), types.clone());
+        TreeNode::new_keyword_with_parent("shark".to_string(), "s".to_string(), types.clone());
     println!("a");
 
     let userdefined_node = TreeNode::new_required(
