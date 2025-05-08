@@ -58,7 +58,7 @@ pub struct TreeNode {
 
 impl TreeNode {
     pub fn add_child(&mut self, child: &Rc<RefCell<TreeNode>>) {
-        self.handle_potential_conflict(child);
+        while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
     }
     pub fn new_keyword(expanded_name: String, short_name: String) -> Rc<RefCell<Self>> {
@@ -218,7 +218,7 @@ impl TreeNode {
         }
         ret
     }
-    fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) {
+    fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
         if let Keyword {
             short,
@@ -238,8 +238,10 @@ impl TreeNode {
                     expanded,
                     closing_token,
                 };
+                return true;
             }
         } else if let Null = &child_borrow.value.ntype {
+            let mut ret = false;
             child_borrow.children.iter().for_each(|child| {
                 if self.handle_potential_conflict_internal(child) {
                     let mut mut_child = child.borrow_mut();
@@ -255,9 +257,14 @@ impl TreeNode {
                             closing_token: closing_token.clone(),
                         };
                     }
+                    ret = true;
                 }
             });
+            if ret {
+                return true;
+            }
         }
+        false
     }
     pub fn dump_children(&self) {
         self.children
