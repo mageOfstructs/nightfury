@@ -125,7 +125,8 @@ impl TreeNode {
             parent: Some(Rc::clone(&parent)),
             children: Vec::new(),
         }));
-        parent.borrow_mut().children.push(Rc::clone(&ret));
+        parent.borrow_mut().add_child(&ret);
+        // parent.borrow_mut().children.push(Rc::clone(&ret));
         ret
     }
     fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
@@ -166,7 +167,9 @@ impl TreeNode {
         for child in &self.children {
             let borrow = child.borrow();
             match &borrow.value.ntype {
-                Keyword { short: nshort, .. } if nshort == short => return Some(Rc::clone(&child)),
+                Keyword { short: nshort, .. } if short.starts_with(nshort) => {
+                    return Some(Rc::clone(&child));
+                }
                 Null => {
                     let rec_res = borrow.get_conflicting_node(short);
                     if rec_res.is_some() {
@@ -204,7 +207,7 @@ impl TreeNode {
                         expanded: expanded.clone(),
                         closing_token: closing_token.clone(),
                     };
-                    println!("2");
+                    println!("conflict handler 2");
                     ret = true;
                 } else {
                     panic!(
@@ -223,11 +226,17 @@ impl TreeNode {
             closing_token,
         } = &child_borrow.value.ntype
         {
+            println!("{:?}", self.value);
+            println!("{:?}", child.borrow().value);
             if self.handle_potential_conflict_internal(child) {
+                let short = NameShortener::expand(Some(short), &expanded);
+                let expanded = expanded.clone();
+                let closing_token = closing_token.clone();
+                drop(child_borrow);
                 child.borrow_mut().value.ntype = Keyword {
-                    short: NameShortener::expand(Some(short), &expanded),
-                    expanded: expanded.clone(),
-                    closing_token: closing_token.clone(),
+                    short,
+                    expanded,
+                    closing_token,
                 };
             }
         } else if let Null = &child_borrow.value.ntype {
@@ -249,6 +258,11 @@ impl TreeNode {
                 }
             });
         }
+    }
+    pub fn dump_children(&self) {
+        self.children
+            .iter()
+            .for_each(|child| println!("{:?}", child.borrow().value));
     }
 }
 
@@ -298,13 +312,19 @@ impl TreeCursor {
     pub fn clear_inputbuf(&mut self) {
         self.input_buf.clear();
     }
-    pub fn search_rec(&self, treenode: &Rc<RefCell<TreeNode>>) -> Option<Rc<RefCell<TreeNode>>> {
+    pub fn search_rec(
+        &self,
+        treenode: &Rc<RefCell<TreeNode>>,
+        potential_matches: &mut u32,
+    ) -> Option<Rc<RefCell<TreeNode>>> {
+        if *potential_matches > 1 {
+            return None; // don't even try
+        }
         // println!("search_rec: {:?}", treenode.borrow().value);
         // println!("{}\n", self.input_buf);
         let binding = treenode;
         let borrow = binding.borrow();
         let mut keyword_match = None;
-        let mut potential_matches = 0;
         for child in &borrow.children {
             let node_val = &child.borrow().value;
             match node_val {
@@ -312,24 +332,35 @@ impl TreeCursor {
                     ntype: NodeType::Keyword { short, .. },
                     ..
                 } if short.starts_with(&self.input_buf) => {
+                    println!("{:?}", child.borrow().value);
+                    println!("{short} == {}", self.input_buf);
                     keyword_match = Some(child.clone());
-                    potential_matches += 1;
+                    *potential_matches += 1;
+                    if *potential_matches > 1 {
+                        break;
+                    }
                 }
                 NodeValue {
                     ntype: NodeType::Null,
                     ..
                 }
                 | NodeValue { optional: true, .. } => {
-                    let rec_res = self.search_rec(&child);
+                    println!("RecParent: {:?}", child.borrow().value);
+                    let rec_res = self.search_rec(&child, potential_matches);
                     if rec_res.is_some() {
-                        potential_matches += 1;
+                        println!("Recursive: {:?}", rec_res.as_ref().unwrap().borrow().value);
+                        // *potential_matches += 1;
                         keyword_match = rec_res;
+                        if *potential_matches > 1 {
+                            break;
+                        }
                     }
                 }
                 _ => {}
             }
         }
-        if keyword_match.is_some() && potential_matches == 1 {
+        println!("pm: {potential_matches}");
+        if keyword_match.is_some() && *potential_matches == 1 {
             return keyword_match;
         }
 
@@ -365,7 +396,7 @@ impl TreeCursor {
                 }
             }
             _ => {
-                let res = self.search_rec(&binding);
+                let res = self.search_rec(&binding, &mut 0);
                 if let Some(node) = res {
                     self.update_cursor(&node);
                     return match &node.borrow().value {
