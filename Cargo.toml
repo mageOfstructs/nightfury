@@ -10,6 +10,7 @@ edition = "2024"
 console = "0.15.11"
 debug_print = "1.0.0"
 regex = "1.11.1"
+ebnf = "0.1.4"
 
 [lib]
 name = "lib"
