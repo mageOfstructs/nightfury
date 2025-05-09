@@ -7,6 +7,15 @@ use lib::*;
 use regex::Regex;
 
 fn main() {
+    lib::frontend::do_stuff(
+        r"
+        filter ::= ( first ' ' )? ( number '~ ' )? ( number '-' number ) ( ' ' number '~' )? ( ' hz' )? ( ' b' )? ( ' i' )? ( ' a' )?;
+        first  ::= #'[a-za-z][a-za-z0-9_+]*';
+        number ::= digits ( ( '.' | ',' ) digits? )?;
+        digits ::= #'[0-9]+';
+    ",
+    );
+    return;
     let root = TreeNode::new_null(None);
     let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
     let child = TreeNode::new(sign_token.clone(), &root);
