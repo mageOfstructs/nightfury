@@ -4,6 +4,8 @@ use std::cell::RefCell;
 use std::ptr::eq;
 use std::rc::{Rc, Weak};
 
+pub mod frontend;
+
 // ironic that this only expands names
 struct NameShortener;
 impl NameShortener {
@@ -127,6 +129,9 @@ pub struct TreeNode {
 }
 
 impl TreeNode {
+    pub fn get_last_child(&self) -> Option<&Rc<RefCell<TreeNode>>> {
+        self.children.last()
+    }
     pub fn add_child(&mut self, child: &Rc<RefCell<TreeNode>>) {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
