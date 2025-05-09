@@ -7,17 +7,9 @@ use lib::*;
 
 fn main() {
     let root = TreeNode::new_null(None);
-    let mut sign_token = NodeType::Keyword {
-        short: String::from("u"),
-        expanded: String::from("unsigned"),
-        closing_token: None,
-    };
+    let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None, false));
     let child = TreeNode::new(sign_token.clone(), &root);
-    sign_token = NodeType::Keyword {
-        short: String::from("s"),
-        expanded: String::from("signed"),
-        closing_token: None,
-    };
+    sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None, false));
 
     let signed = TreeNode::new(sign_token, &root);
     let types = TreeNode::new_required(NodeType::Null, &child);
@@ -40,11 +32,7 @@ fn main() {
     root.borrow_mut().add_child(&types);
 
     let expression = TreeNode::new(
-        NodeType::Keyword {
-            short: String::from("("),
-            expanded: String::from("("),
-            closing_token: Some(String::from(")")),
-        },
+        NodeType::Keyword(Keyword::new("(".to_string(), Some(")".to_string()), false)),
         &root,
     );
     let expr_boolvar = TreeNode::new(
@@ -55,11 +43,7 @@ fn main() {
     );
     expr_boolvar.borrow_mut().add_child(&null.clone());
     let cond_and = TreeNode::new(
-        NodeType::Keyword {
-            short: String::from("&"),
-            expanded: String::from("&&"),
-            closing_token: None,
-        },
+        NodeType::Keyword(Keyword::new("&&".to_string(), None, false)),
         &expression,
     );
     cond_and.borrow_mut().add_child(&expr_boolvar);
