@@ -7,16 +7,13 @@ use lib::*;
 
 fn main() {
     let root = TreeNode::new_null(None);
-    let mut sign_token = NodeValue {
-        ntype: NodeType::Keyword {
-            short: String::from("u"),
-            expanded: String::from("unsigned"),
-            closing_token: None,
-        },
-        optional: false,
+    let mut sign_token = NodeType::Keyword {
+        short: String::from("u"),
+        expanded: String::from("unsigned"),
+        closing_token: None,
     };
     let child = TreeNode::new(sign_token.clone(), &root);
-    sign_token.ntype = NodeType::Keyword {
+    sign_token = NodeType::Keyword {
         short: String::from("s"),
         expanded: String::from("signed"),
         closing_token: None,
@@ -43,34 +40,25 @@ fn main() {
     root.borrow_mut().add_child(&types);
 
     let expression = TreeNode::new(
-        NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::from("("),
-                expanded: String::from("("),
-                closing_token: Some(String::from(")")),
-            },
-            optional: false,
+        NodeType::Keyword {
+            short: String::from("("),
+            expanded: String::from("("),
+            closing_token: Some(String::from(")")),
         },
         &root,
     );
     let expr_boolvar = TreeNode::new(
-        NodeValue {
-            ntype: NodeType::UserDefined {
-                final_chars: vec![')', '&', '('],
-            },
-            optional: false,
+        NodeType::UserDefined {
+            final_chars: vec![')', '&', '('],
         },
         &expression,
     );
     expr_boolvar.borrow_mut().add_child(&null.clone());
     let cond_and = TreeNode::new(
-        NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::from("&"),
-                expanded: String::from("&&"),
-                closing_token: None,
-            },
-            optional: false,
+        NodeType::Keyword {
+            short: String::from("&"),
+            expanded: String::from("&&"),
+            closing_token: None,
         },
         &expression,
     );

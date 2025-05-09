@@ -58,7 +58,7 @@ pub struct NodeValue {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TreeNode {
-    value: NodeValue,
+    value: NodeType,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
 }
@@ -75,10 +75,7 @@ impl TreeNode {
             None
         };
         let ret = Rc::new(RefCell::new(Self {
-            value: NodeValue {
-                ntype: Null,
-                optional: false,
-            },
+            value: Null,
             parent: parent_ref,
             children: Vec::new(),
         }));
@@ -89,13 +86,10 @@ impl TreeNode {
     }
     pub fn new_keyword(expanded_name: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
-            value: NodeValue {
-                ntype: Keyword {
-                    short: expanded_name.chars().nth(0).unwrap().to_string(),
-                    expanded: expanded_name,
-                    closing_token: None,
-                },
-                optional: false,
+            value: Keyword {
+                short: expanded_name.chars().nth(0).unwrap().to_string(),
+                expanded: expanded_name,
+                closing_token: None,
             },
             parent: None,
             children: Vec::new(),
@@ -112,7 +106,7 @@ impl TreeNode {
         }
     }
 
-    pub fn new(value: NodeValue, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+    pub fn new(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
             value,
             parent: Some(Rc::clone(parent)),
@@ -124,10 +118,7 @@ impl TreeNode {
 
     pub fn new_required(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
-            value: NodeValue {
-                ntype: value,
-                optional: false,
-            },
+            value,
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
         }));
@@ -139,17 +130,14 @@ impl TreeNode {
         parent: Rc<RefCell<TreeNode>>,
     ) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
-            value: NodeValue {
-                ntype: NodeType::Keyword {
-                    short: expanded_name
-                        .chars()
-                        .nth(0)
-                        .expect("Keyword must not be empty!")
-                        .to_string(),
-                    expanded: expanded_name,
-                    closing_token: None,
-                },
-                optional: false,
+            value: NodeType::Keyword {
+                short: expanded_name
+                    .chars()
+                    .nth(0)
+                    .expect("Keyword must not be empty!")
+                    .to_string(),
+                expanded: expanded_name,
+                closing_token: None,
             },
             parent: Some(Rc::clone(&parent)),
             children: Vec::new(),
@@ -160,7 +148,7 @@ impl TreeNode {
     }
     fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
         for child in &self.children {
-            if let Keyword { short: nshort, .. } = &child.borrow().value.ntype
+            if let Keyword { short: nshort, .. } = &child.borrow().value
                 && nshort == short
             {
                 return Some(Rc::clone(&child));
@@ -178,7 +166,7 @@ impl TreeNode {
     fn check_for_conflicts(&self, short: &str) -> bool {
         for child in &self.children {
             let borrow = child.borrow();
-            match &borrow.value.ntype {
+            match &borrow.value {
                 Keyword { short: nshort, .. } if nshort == short => return true,
                 Null => {
                     let rec_res = borrow.check_for_conflicts(short);
@@ -195,7 +183,7 @@ impl TreeNode {
     fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
         for child in &self.children {
             let borrow = child.borrow();
-            match &borrow.value.ntype {
+            match &borrow.value {
                 Keyword { short: nshort, .. } if short.starts_with(nshort) => {
                     return Some(Rc::clone(&child));
                 }
@@ -217,7 +205,7 @@ impl TreeNode {
             short: cshort,
             expanded: cexpanded,
             closing_token: cclosing_token,
-        } = &child_borrow.value.ntype
+        } = &child_borrow.value
         {
             if let Some(node) = self.get_conflicting_node(cshort)
                 && node.borrow().value != child_borrow.value
@@ -227,11 +215,11 @@ impl TreeNode {
                     short,
                     expanded,
                     closing_token,
-                } = &mut_binding.value.ntype
+                } = &mut_binding.value
                 {
                     let new_short = NameShortener::expand(Some(short), expanded);
                     // awful string copy below
-                    mut_binding.value.ntype = Keyword {
+                    mut_binding.value = Keyword {
                         short: new_short,
                         expanded: expanded.clone(),
                         closing_token: closing_token.clone(),
@@ -253,7 +241,7 @@ impl TreeNode {
             short,
             expanded,
             closing_token,
-        } = &child_borrow.value.ntype
+        } = &child_borrow.value
         {
             println!("{:?}", self.value);
             println!("{:?}", child.borrow().value);
@@ -262,14 +250,14 @@ impl TreeNode {
                 let expanded = expanded.clone();
                 let closing_token = closing_token.clone();
                 drop(child_borrow);
-                child.borrow_mut().value.ntype = Keyword {
+                child.borrow_mut().value = Keyword {
                     short,
                     expanded,
                     closing_token,
                 };
                 return true;
             }
-        } else if let Null = &child_borrow.value.ntype {
+        } else if let Null = &child_borrow.value {
             let mut ret = false;
             child_borrow.children.iter().for_each(|child| {
                 if self.handle_potential_conflict_internal(child) {
@@ -278,9 +266,9 @@ impl TreeNode {
                         short,
                         expanded,
                         closing_token,
-                    } = &mut_child.value.ntype
+                    } = &mut_child.value
                     {
-                        mut_child.value.ntype = Keyword {
+                        mut_child.value = Keyword {
                             short: NameShortener::expand(Some(short), &expanded),
                             expanded: expanded.clone(),
                             closing_token: closing_token.clone(),
@@ -324,14 +312,10 @@ impl TreeCursor {
             let borrow = strong_ref.borrow();
             let next_node = Rc::clone(&borrow.children[child_idx]);
             self.update_cursor(&next_node);
-            let ret = if let NodeValue {
-                ntype:
-                    NodeType::Keyword {
-                        short,
-                        expanded,
-                        closing_token: None,
-                    },
-                ..
+            let ret = if let NodeType::Keyword {
+                short,
+                expanded,
+                closing_token: None,
             } = &next_node.borrow().value
                 && *short == String::from(input)
             {
@@ -364,10 +348,7 @@ impl TreeCursor {
         for child in &borrow.children {
             let node_val = &child.borrow().value;
             match node_val {
-                NodeValue {
-                    ntype: NodeType::Keyword { short, .. },
-                    ..
-                } if short.starts_with(&self.input_buf) => {
+                NodeType::Keyword { short, .. } if short.starts_with(&self.input_buf) => {
                     println!("{:?}", child.borrow().value);
                     println!("{short} == {}", self.input_buf);
                     keyword_match = Some(child.clone());
@@ -376,11 +357,7 @@ impl TreeCursor {
                         break;
                     }
                 }
-                NodeValue {
-                    ntype: NodeType::Null,
-                    ..
-                }
-                | NodeValue { optional: true, .. } => {
+                Null => {
                     println!("RecParent: {:?}", child.borrow().value);
                     let rec_res = self.search_rec(&child, potential_matches);
                     if rec_res.is_some() {
@@ -402,11 +379,7 @@ impl TreeCursor {
 
         // so we can start typing right away
         let userdef_match = borrow.children.iter().find(|child| {
-            if let NodeValue {
-                ntype: NodeType::UserDefined { .. },
-                ..
-            } = child.borrow().value
-            {
+            if let NodeType::UserDefined { .. } = child.borrow().value {
                 true
             } else {
                 false
@@ -422,10 +395,7 @@ impl TreeCursor {
         let borrow = binding.borrow();
         self.input_buf.push(input);
         match &borrow.value {
-            NodeValue {
-                ntype: NodeType::UserDefined { final_chars, .. },
-                ..
-            } => {
+            NodeType::UserDefined { final_chars, .. } => {
                 let res = self.handle_userdefined(input, final_chars);
                 if res.is_some() {
                     return res;
@@ -436,17 +406,11 @@ impl TreeCursor {
                 if let Some(node) = res {
                     self.update_cursor(&node);
                     return match &node.borrow().value {
-                        NodeValue {
-                            ntype: NodeType::Keyword { expanded, .. },
-                            ..
-                        } => {
+                        NodeType::Keyword { expanded, .. } => {
                             self.input_buf.clear();
                             Some(expanded.clone())
                         }
-                        NodeValue {
-                            ntype: NodeType::UserDefined { final_chars },
-                            ..
-                        } => {
+                        NodeType::UserDefined { final_chars } => {
                             let res = self.handle_userdefined(input, &final_chars);
                             res
                         }
@@ -460,12 +424,8 @@ impl TreeCursor {
 
     fn update_cursor(&mut self, node: &Rc<RefCell<TreeNode>>) {
         self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
-        if let NodeValue {
-            ntype:
-                NodeType::Keyword {
-                    closing_token: Some(_),
-                    ..
-                },
+        if let NodeType::Keyword {
+            closing_token: Some(_),
             ..
         } = &node.borrow().value
         {
@@ -494,18 +454,14 @@ impl TreeCursor {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
-        if let NodeValue {
-            ntype: NodeType::UserDefined { .. },
-            ..
-        } = self.get_cur_ast_binding().borrow().value
-        {
+        if let NodeType::UserDefined { .. } = self.get_cur_ast_binding().borrow().value {
             true
         } else {
             false
         }
     }
 
-    fn get_current_nodeval(&self) -> NodeValue {
+    fn get_current_nodeval(&self) -> NodeType {
         self.get_cur_ast_binding().borrow().value.clone()
     }
     fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
@@ -532,35 +488,23 @@ mod tests {
         let second = TreeNode::new_keyword_with_parent("int".to_string(), root.clone());
         TreeNode::new_keyword_with_parent("asdf".to_string(), second.clone());
         let mut cursor = TreeCursor::new(&root);
-        assert_eq!(
-            cursor.get_current_nodeval(),
-            NodeValue {
-                ntype: NodeType::Null,
-                optional: false
-            }
-        );
+        assert_eq!(cursor.get_current_nodeval(), Null);
         cursor.advance('i').unwrap();
         assert_eq!(
             cursor.get_current_nodeval(),
-            NodeValue {
-                ntype: NodeType::Keyword {
-                    short: String::from("i"),
-                    expanded: String::from("int"),
-                    closing_token: None
-                },
-                optional: false
-            }
+            NodeType::Keyword {
+                short: String::from("i"),
+                expanded: String::from("int"),
+                closing_token: None
+            },
         );
         cursor.advance('a').unwrap();
         assert_eq!(
             cursor.get_current_nodeval(),
-            NodeValue {
-                ntype: NodeType::Keyword {
-                    short: String::from("a"),
-                    expanded: String::from("asdf"),
-                    closing_token: None
-                },
-                optional: false
+            NodeType::Keyword {
+                short: String::from("a"),
+                expanded: String::from("asdf"),
+                closing_token: None
             }
         );
     }
@@ -568,16 +512,13 @@ mod tests {
     #[test]
     fn test_conflict_check() {
         let root = TreeNode::new_null(None);
-        let mut sign_token = NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::from("u"),
-                expanded: String::from("unsigned"),
-                closing_token: None,
-            },
-            optional: true,
+        let mut sign_token = NodeType::Keyword {
+            short: String::from("u"),
+            expanded: String::from("unsigned"),
+            closing_token: None,
         };
         let child = TreeNode::new(sign_token.clone(), &root);
-        sign_token.ntype = NodeType::Keyword {
+        sign_token = NodeType::Keyword {
             short: String::from("s"),
             expanded: String::from("signed"),
             closing_token: None,
@@ -600,16 +541,13 @@ mod tests {
     #[test]
     fn test_keyword_matching() {
         let root = TreeNode::new_null(None);
-        let mut sign_token = NodeValue {
-            ntype: NodeType::Keyword {
-                short: String::from("u"),
-                expanded: String::from("unsigned"),
-                closing_token: None,
-            },
-            optional: false,
+        let mut sign_token = NodeType::Keyword {
+            short: String::from("u"),
+            expanded: String::from("unsigned"),
+            closing_token: None,
         };
         let child = TreeNode::new(sign_token.clone(), &root);
-        sign_token.ntype = NodeType::Keyword {
+        sign_token = NodeType::Keyword {
             short: String::from("s"),
             expanded: String::from("signed"),
             closing_token: None,
