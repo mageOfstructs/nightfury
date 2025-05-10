@@ -30,16 +30,14 @@ pub struct Keyword {
     short: String,
     expanded: String,
     closing_token: Option<String>,
-    regex: bool,
 }
 
 impl Keyword {
-    pub fn new(expanded: String, closing_token: Option<String>, regex: bool) -> Self {
+    pub fn new(expanded: String, closing_token: Option<String>) -> Self {
         Self {
             short: expanded.chars().nth(0).unwrap().to_string(),
             expanded,
             closing_token,
-            regex,
         }
     }
 }
@@ -50,7 +48,6 @@ impl Default for Keyword {
             short: String::new(),
             expanded: String::new(),
             closing_token: None,
-            regex: false,
         }
     }
 }
@@ -475,21 +472,21 @@ mod tests {
         cursor.advance('i').unwrap();
         assert_eq!(
             cursor.get_current_nodeval(),
-            NodeType::Keyword(Keyword::new("int".to_string(), None, false)),
+            NodeType::Keyword(Keyword::new("int".to_string(), None)),
         );
         cursor.advance('a').unwrap();
         assert_eq!(
             cursor.get_current_nodeval(),
-            NodeType::Keyword(Keyword::new("asdf".to_string(), None, false)),
+            NodeType::Keyword(Keyword::new("asdf".to_string(), None)),
         );
     }
 
     #[test]
     fn test_conflict_check() {
         let root = TreeNode::new_null(None);
-        let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None, false));
+        let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
         let child = TreeNode::new(sign_token.clone(), &root);
-        sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None, false));
+        sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
 
         let child2 = TreeNode::new(sign_token, &root);
         let types = TreeNode::new_required(NodeType::Null, &child);
@@ -508,9 +505,9 @@ mod tests {
     #[test]
     fn test_keyword_matching() {
         let root = TreeNode::new_null(None);
-        let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None, false));
+        let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
         let child = TreeNode::new(sign_token.clone(), &root);
-        sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None, false));
+        sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
 
         let child2 = TreeNode::new(sign_token, &root);
         let types = TreeNode::new_required(NodeType::Null, &child);

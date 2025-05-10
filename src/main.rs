@@ -7,9 +7,9 @@ use lib::*;
 
 fn main() {
     let root = TreeNode::new_null(None);
-    let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None, false));
+    let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
     let child = TreeNode::new(sign_token.clone(), &root);
-    sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None, false));
+    sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
 
     let signed = TreeNode::new(sign_token, &root);
     let types = TreeNode::new_required(NodeType::Null, &child);
@@ -17,7 +17,6 @@ fn main() {
     let int = TreeNode::new_keyword_with_parent("int".to_string(), types.clone());
     let short = TreeNode::new_keyword_with_parent("short".to_string(), types.clone());
     let short2 = TreeNode::new_keyword_with_parent("shark".to_string(), types.clone());
-    println!("a");
 
     let userdefined_node = TreeNode::new_required(
         NodeType::UserDefined {
@@ -32,7 +31,7 @@ fn main() {
     root.borrow_mut().add_child(&types);
 
     let expression = TreeNode::new(
-        NodeType::Keyword(Keyword::new("(".to_string(), Some(")".to_string()), false)),
+        NodeType::Keyword(Keyword::new("(".to_string(), Some(")".to_string()))),
         &root,
     );
     let expr_boolvar = TreeNode::new(
@@ -43,7 +42,7 @@ fn main() {
     );
     expr_boolvar.borrow_mut().add_child(&null.clone());
     let cond_and = TreeNode::new(
-        NodeType::Keyword(Keyword::new("&&".to_string(), None, false)),
+        NodeType::Keyword(Keyword::new("&&".to_string(), None)),
         &expression,
     );
     cond_and.borrow_mut().add_child(&expr_boolvar);
