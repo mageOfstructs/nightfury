@@ -8,6 +8,8 @@ edition = "2024"
 
 [dependencies]
 console = "0.15.11"
+debug_print = "1.0.0"
+regex = "1.11.1"
 
 [lib]
 name = "lib"
