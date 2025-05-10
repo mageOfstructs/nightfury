@@ -4,6 +4,7 @@ use std::io::Write;
 
 use console::Term;
 use lib::*;
+use regex::Regex;
 
 fn main() {
     let root = TreeNode::new_null(None);
@@ -19,11 +20,15 @@ fn main() {
     let short2 = TreeNode::new_keyword_with_parent("shark".to_string(), types.clone());
 
     let userdefined_node = TreeNode::new_required(
-        NodeType::UserDefined {
-            final_chars: vec!['='],
-        },
+        NodeType::UserDefinedRegex(Regex::new("[0-9]{3,3}").unwrap()),
         &int,
     );
+    // let userdefined_node = TreeNode::new_required(
+    //     NodeType::UserDefined {
+    //         final_chars: vec!['='],
+    //     },
+    //     &int,
+    // );
     let null = TreeNode::new_required(NodeType::Null, &userdefined_node);
     short.borrow_mut().add_child(&userdefined_node);
 
@@ -50,7 +55,7 @@ fn main() {
     expr_boolvar.borrow_mut().add_child(&expression);
 
     println!("Dump:");
-    signed.borrow().dump_children();
+    int.borrow().dump_children();
     // root.borrow().dbg();
     let mut cursor = TreeCursor::new(&root);
 

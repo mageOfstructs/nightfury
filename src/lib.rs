@@ -1,6 +1,7 @@
 #![feature(let_chains)]
 
 use std::cell::RefCell;
+use std::ptr::eq;
 use std::rc::{Rc, Weak};
 
 // ironic that this only expands names
@@ -20,7 +21,7 @@ impl NameShortener {
         } else {
             full[0..1].to_string()
         };
-        println!("Got {} instead of {old:?}", ret);
+        debug_println!("Got {} instead of {old:?}", ret);
         ret
     }
 }
@@ -52,14 +53,65 @@ impl Default for Keyword {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+// TODO: combine UserDefined and UserDefinedRegex into one variant
+#[derive(Debug, Clone)]
 pub enum NodeType {
     Keyword(Keyword),
     UserDefined { final_chars: Vec<char> },
+    UserDefinedRegex(Regex),
     Null,
 }
 
+impl PartialEq for NodeType {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Keyword(k) => match other {
+                Keyword(k2) => k.eq(k2),
+                _ => false,
+            },
+            UserDefined { final_chars: fc } => match other {
+                UserDefined { final_chars: fc2 } => fc.eq(fc2),
+                _ => false,
+            },
+            UserDefinedRegex(r) => match other {
+                UserDefinedRegex(r2) => r.as_str().eq(r2.as_str()),
+                _ => false,
+            },
+            Null => match other {
+                Null => true,
+                _ => false,
+            },
+        }
+    }
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
+}
+
+trait PartialMatch {
+    fn partial_match(&self, hay: &str) -> bool;
+}
+
+impl PartialMatch for Regex {
+    /**
+    not a perfect solution and should therefore be never used
+    **/
+    fn partial_match(&self, hay: &str) -> bool {
+        let orig = self.as_str();
+        for i in 1..orig.len() {
+            if let Ok(regex) = Regex::new(&orig[0..=i])
+                && regex.is_match(hay)
+            {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 use NodeType::*;
+use debug_print::debug_println;
+use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeValue {
@@ -213,7 +265,7 @@ impl TreeNode {
                             &keyword_struct.expanded,
                         );
                         keyword_struct.short = new_short;
-                        println!("conflict handler 2");
+                        debug_println!("conflict handler 2");
                         ret = true;
                         node.to_owned()
                     } else {
@@ -229,8 +281,8 @@ impl TreeNode {
     fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
         if let Keyword(keyword_struct) = &child_borrow.value {
-            println!("{:?}", self.value);
-            println!("{:?}", child.borrow().value);
+            debug_println!("{:?}", self.value);
+            debug_println!("{:?}", child.borrow().value);
             if self.handle_potential_conflict_internal(child) {
                 let short =
                     NameShortener::expand(Some(&keyword_struct.short), &keyword_struct.expanded);
@@ -329,8 +381,8 @@ impl TreeCursor {
             let node_val = &child.borrow().value;
             match node_val {
                 NodeType::Keyword(Keyword { short, .. }) if short.starts_with(&self.input_buf) => {
-                    println!("{:?}", child.borrow().value);
-                    println!("{short} == {}", self.input_buf);
+                    debug_println!("{:?}", child.borrow().value);
+                    debug_println!("{short} == {}", self.input_buf);
                     keyword_match = Some(child.clone());
                     *potential_matches += 1;
                     if *potential_matches > 1 {
@@ -338,10 +390,10 @@ impl TreeCursor {
                     }
                 }
                 Null => {
-                    println!("RecParent: {:?}", child.borrow().value);
+                    debug_println!("RecParent: {:?}", child.borrow().value);
                     let rec_res = self.search_rec(&child, potential_matches);
                     if rec_res.is_some() {
-                        println!("Recursive: {:?}", rec_res.as_ref().unwrap().borrow().value);
+                        debug_println!("Recursive: {:?}", rec_res.as_ref().unwrap().borrow().value);
                         // *potential_matches += 1;
                         keyword_match = rec_res;
                         if *potential_matches > 1 {
@@ -352,19 +404,19 @@ impl TreeCursor {
                 _ => {}
             }
         }
-        println!("pm: {potential_matches}");
+        debug_println!("pm: {potential_matches}");
         if keyword_match.is_some() && *potential_matches == 1 {
             return keyword_match;
         }
 
         // so we can start typing right away
-        let userdef_match = borrow.children.iter().find(|child| {
-            if let NodeType::UserDefined { .. } = child.borrow().value {
-                true
-            } else {
-                false
-            }
-        });
+        let userdef_match = borrow
+            .children
+            .iter()
+            .find(|child| match child.borrow().value {
+                UserDefined { .. } | UserDefinedRegex(..) => true,
+                _ => false,
+            });
         if userdef_match.is_some() {
             return userdef_match.cloned();
         }
@@ -381,6 +433,34 @@ impl TreeCursor {
                     return res;
                 }
             }
+            NodeType::UserDefinedRegex(r) => {
+                debug_println!("{}", &self.input_buf);
+                if r.is_match(&self.input_buf) {
+                    let strong_ref = self.get_cur_ast_binding();
+                    let borrow = strong_ref.borrow();
+                    let next_node = Rc::clone(
+                        &borrow
+                            .children
+                            .get(0)
+                            .expect("UserDefinedRegex doesn't have a child and is therefore sad"),
+                    );
+                    self.update_cursor(&next_node);
+                    let ret = if let NodeType::Keyword(Keyword {
+                        short,
+                        expanded,
+                        closing_token: None,
+                        ..
+                    }) = &next_node.borrow().value
+                        && *short == String::from(input)
+                    {
+                        Some(expanded.clone())
+                    } else {
+                        Some(String::new())
+                    };
+                    self.input_buf.clear();
+                    return ret;
+                }
+            }
             _ => {
                 let res = self.search_rec(&binding, &mut 0);
                 if let Some(node) = res {
@@ -394,6 +474,7 @@ impl TreeCursor {
                             let res = self.handle_userdefined(input, &final_chars);
                             res
                         }
+                        NodeType::UserDefinedRegex(r) => None,
                         _ => unreachable!(),
                     };
                 }
@@ -414,7 +495,7 @@ impl TreeCursor {
             // we don't need to jump back if only one remains
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
         }
-        println!("{:?}", self.get_cur_ast_binding().borrow().value);
+        debug_println!("{:?}", self.get_cur_ast_binding().borrow().value);
     }
     fn dump(&self) {
         println!(
