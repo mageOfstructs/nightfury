@@ -404,6 +404,24 @@ impl TreeCursor {
     pub fn clear_inputbuf(&mut self) {
         self.input_buf.clear();
     }
+    fn search_for_userdefs(
+        &self,
+        treenode: &Rc<RefCell<TreeNode>>,
+    ) -> Option<Rc<RefCell<TreeNode>>> {
+        for child in &treenode.borrow().children {
+            match child.borrow().value {
+                UserDefined { .. } | UserDefinedRegex { .. } => return Some(child.clone()),
+                Null => {
+                    let rec_res = self.search_for_userdefs(&child);
+                    if rec_res.is_some() {
+                        return rec_res;
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
     pub fn search_rec(
         &self,
         treenode: &Rc<RefCell<TreeNode>>,
@@ -450,15 +468,17 @@ impl TreeCursor {
         }
 
         // so we can start typing right away
-        let userdef_match = borrow
-            .children
-            .iter()
-            .find(|child| match child.borrow().value {
-                UserDefined { .. } | UserDefinedRegex(..) => true,
-                _ => false,
-            });
+        //
+        // let userdef_match = borrow
+        //     .children
+        //     .iter()
+        //     .find(|child| match child.borrow().value {
+        //         UserDefined { .. } | UserDefinedRegex(..) => true,
+        //         _ => false,
+        //     });
+        let userdef_match = self.search_for_userdefs(treenode);
         if userdef_match.is_some() {
-            return userdef_match.cloned();
+            return userdef_match;
         }
         None
     }
