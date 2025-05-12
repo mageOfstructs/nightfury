@@ -8,7 +8,7 @@ use regex::Regex;
 
 fn main() {
     let ebnf = r"
-        syntax ::= ( signed_keyword )? types '=' value;
+        syntax ::= ( signed_keyword )? types value;
         signed_keyword ::= 'signed' | 'unsigned';
         types ::= 'int' | 'short';
         value ::= #'^.+;$';
