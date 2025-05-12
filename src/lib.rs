@@ -555,10 +555,9 @@ impl TreeCursor {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
-        if let NodeType::UserDefined { .. } = self.get_cur_ast_binding().borrow().value {
-            true
-        } else {
-            false
+        match self.get_cur_ast_binding().borrow().value {
+            NodeType::UserDefined { .. } | NodeType::UserDefinedRegex(..) => true,
+            _ => false,
         }
     }
 
