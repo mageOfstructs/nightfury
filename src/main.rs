@@ -7,14 +7,34 @@ use lib::*;
 use regex::Regex;
 
 fn main() {
-    lib::frontend::do_stuff(
-        r"
-        filter ::= ( first ' ' )? ( number '~ ' )? ( number '-' number ) ( ' ' number '~' )? ( ' hz' )? ( ' b' )? ( ' i' )? ( ' a' )?;
-        first  ::= #'[a-za-z][a-za-z0-9_+]*';
-        number ::= digits ( ( '.' | ',' ) digits? )?;
-        digits ::= #'[0-9]+';
-    ",
-    );
+    let ebnf = r"
+        syntax ::= ( signed_keyword )? types '=' value;
+        signed_keyword ::= 'signed' | 'unsigned';
+        types ::= 'int' | 'short';
+        value ::= #'^.+;$';
+    ";
+    frontend::do_stuff(ebnf);
+    if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
+        root.borrow().dbg();
+        let mut cursor = TreeCursor::new(&root);
+
+        let terminal = Term::stdout();
+        while !cursor.is_done() {
+            let input = terminal.read_char().unwrap();
+            match input {
+                '\x08' => cursor.clear_inputbuf(),
+                _ => {
+                    if let Some(res) = cursor.advance(input) {
+                        print!("{} ", res);
+                    }
+                }
+            }
+            if cursor.is_in_userdefined_stage() {
+                print!("{input}");
+            }
+            std::io::stdout().flush();
+        }
+    }
     return;
     let root = TreeNode::new_null(None);
     let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
