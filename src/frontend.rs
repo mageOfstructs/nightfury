@@ -20,7 +20,6 @@ fn handle_node(
 ) -> Rc<RefCell<TreeNode>> {
     match &cur_node {
         Node::String(str) => {
-            // FIXME: the fact that this uses a local root breaks the entire collision detection
             TreeNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root))
         }
         Node::RegexString(r) => TreeNode::new(
@@ -39,6 +38,7 @@ fn handle_node(
                 let tree_bit = handle_node(grammar, &node, &cur_treenode);
                 if let Some(last_opt) = &last_opt {
                     last_opt.borrow_mut().add_child_to_all_leaves(&tree_bit);
+                    // yes this needs to be here
                     last_opt.borrow_mut().handle_potential_conflict(&tree_bit);
                 }
                 match node {
