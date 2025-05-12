@@ -90,6 +90,8 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, Strin
             let root = TreeNode::new_null(None);
             let root_node = grammar.expressions.remove(0); // .expect("Empty BNF!");
             handle_node(&grammar, &root_node.rhs, &root);
+            root.borrow_mut()
+                .add_child_to_all_leaves(&TreeNode::new_null(None));
             Ok(root)
         }
         Err(err) => Err(err.to_string()),
