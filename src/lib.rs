@@ -161,9 +161,9 @@ impl TreeNode {
     }
     fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
         for child in &self.children {
-            println!("at node {:?}", child.borrow().value);
+            debug_println!("at node {:?}", child.borrow().value);
             if child.borrow().children.is_empty() {
-                println!("adding node {:?}", child.borrow().value);
+                debug_println!("adding node {:?}", child.borrow().value);
                 discovered_leaves.push(child.clone());
             } else {
                 child.borrow().get_all_leaves(discovered_leaves);
@@ -515,7 +515,7 @@ impl TreeCursor {
                     {
                         Some(expanded.clone())
                     } else {
-                        Some(String::new())
+                        Some(input.to_string())
                     };
                     self.input_buf.clear();
                     return ret;
