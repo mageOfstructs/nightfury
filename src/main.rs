@@ -13,7 +13,6 @@ fn main() {
         types ::= 'int' | 'short';
         value ::= #'^.+;$';
     ";
-    frontend::do_stuff(ebnf);
     if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
         root.borrow().dbg();
         let mut cursor = TreeCursor::new(&root);
