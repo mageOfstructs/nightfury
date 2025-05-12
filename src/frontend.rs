@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use debug_print::debug_println;
 use ebnf::{Expression, Grammar, Node, RegexExtKind, SymbolKind};
 use regex::Regex;
 
@@ -34,14 +35,9 @@ fn handle_node(
             let mut cur_treenode = cur_root.clone();
             let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
             nodes.iter().for_each(|node| {
-                println!("{node:?}");
+                debug_println!("{node:?}");
                 let tree_bit = handle_node(grammar, &node, &cur_treenode);
-                // println!("tdbg:");
-                // cur_root.borrow().dbg();
                 if let Some(last_opt) = &last_opt {
-                    println!("Shortly before disaster:");
-                    last_opt.borrow().dbg();
-                    tree_bit.borrow().dbg();
                     last_opt.borrow_mut().add_child_to_all_leaves(&tree_bit);
                     last_opt.borrow_mut().handle_potential_conflict(&tree_bit);
                 }
