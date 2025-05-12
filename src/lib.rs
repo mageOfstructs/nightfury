@@ -129,8 +129,8 @@ pub struct TreeNode {
 }
 
 impl TreeNode {
-    pub fn get_last_child(&self) -> Option<&Rc<RefCell<TreeNode>>> {
-        self.children.last()
+    pub fn get_last_child(&self) -> Option<Rc<RefCell<TreeNode>>> {
+        self.children.last().cloned()
     }
     pub fn add_child(&mut self, child: &Rc<RefCell<TreeNode>>) {
         while self.handle_potential_conflict(child) {}
