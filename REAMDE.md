@@ -9,5 +9,16 @@ The primary goal is to minimise the time programmers spent on typing syntax. It'
 ## Features
 
 - [ ] BNF-based tree generator
+  - needs more testing
 - [ ] IDE-independent client-server architecture
 - [ ] lots of customization-potential
+
+## Running
+
+```sh
+cargo run # debug build, very verbose logging
+```
+
+```sh
+cargo run --release # release build, almost no logging
+```
