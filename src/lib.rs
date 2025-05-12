@@ -148,19 +148,54 @@ impl TreeNode {
             children: Vec::new(),
         }));
         if let Some(parent) = parent {
-            parent.borrow_mut().children.push(Rc::clone(&ret));
+            parent.borrow_mut().add_child(&ret);
         }
         ret
     }
 
+    fn dbg_internal(&self, indent: usize) {
+        println!("{}{:?}", " ".repeat(indent), self.value);
+        for child in self.children.iter() {
+            child.borrow().dbg_internal(indent + 4);
+        }
+    }
+    fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
+        for child in &self.children {
+            println!("at node {:?}", child.borrow().value);
+            if child.borrow().children.is_empty() {
+                println!("adding node {:?}", child.borrow().value);
+                discovered_leaves.push(child.clone());
+            } else {
+                child.borrow().get_all_leaves(discovered_leaves);
+            }
+        }
+    }
+    pub fn add_child_to_all_leaves(&mut self, child: &Rc<RefCell<TreeNode>>) {
+        let mut leaves = Vec::new();
+        self.get_all_leaves(&mut leaves);
+        while let Some(node) = leaves.pop() {
+            if node.borrow().children.is_empty() {
+                node.borrow_mut().add_child(&child);
+            }
+        }
+        if self.children.is_empty() {
+            self.add_child(child);
+        }
+    }
+    pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
+        for child in &self.children {
+            if child.borrow().children.is_empty() {
+                return Some(child.clone());
+            } else {
+                if let Some(child) = child.borrow().race_to_leaf() {
+                    return Some(child);
+                }
+            }
+        }
+        None
+    }
     pub fn dbg(&self) {
-        for child in self.children.iter() {
-            print!("{:?} ", child.borrow().value);
-        }
-        println!();
-        for child in self.children.iter() {
-            child.borrow().dbg();
-        }
+        self.dbg_internal(0);
     }
 
     pub fn new(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
@@ -169,7 +204,7 @@ impl TreeNode {
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
         }));
-        parent.borrow_mut().children.push(Rc::clone(&ret));
+        parent.borrow_mut().add_child(&ret);
         ret
     }
 
@@ -179,7 +214,7 @@ impl TreeNode {
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
         }));
-        parent.borrow_mut().children.push(Rc::clone(&ret));
+        parent.borrow_mut().add_child(&ret);
         ret
     }
 
@@ -374,9 +409,9 @@ impl TreeCursor {
         treenode: &Rc<RefCell<TreeNode>>,
         potential_matches: &mut u32,
     ) -> Option<Rc<RefCell<TreeNode>>> {
-        if *potential_matches > 1 {
-            return None; // don't even try
-        }
+        // if *potential_matches > 1 {
+        //     return None; // don't even try
+        // }
         // println!("search_rec: {:?}", treenode.borrow().value);
         // println!("{}\n", self.input_buf);
         let binding = treenode;

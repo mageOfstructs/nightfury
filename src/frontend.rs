@@ -17,9 +17,9 @@ fn handle_node(
     cur_node: &Node,
     cur_root: &Rc<RefCell<TreeNode>>,
 ) -> Rc<RefCell<TreeNode>> {
-    println!("{cur_node:?}");
     match &cur_node {
         Node::String(str) => {
+            // FIXME: the fact that this uses a local root breaks the entire collision detection
             TreeNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root))
         }
         Node::RegexString(r) => TreeNode::new(
@@ -34,17 +34,23 @@ fn handle_node(
             let mut cur_treenode = cur_root.clone();
             let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
             nodes.iter().for_each(|node| {
-                let tree_bit =
-                    handle_node(grammar, &node, &TreeNode::new_null(Some(&cur_treenode)));
+                println!("{node:?}");
+                let tree_bit = handle_node(grammar, &node, &cur_treenode);
+                // println!("tdbg:");
+                // cur_root.borrow().dbg();
                 if let Some(last_opt) = &last_opt {
-                    last_opt.borrow_mut().add_child(&tree_bit);
+                    println!("Shortly before disaster:");
+                    last_opt.borrow().dbg();
+                    tree_bit.borrow().dbg();
+                    last_opt.borrow_mut().add_child_to_all_leaves(&tree_bit);
                 }
                 match node {
                     Node::RegexExt(_, RegexExtKind::Optional) | Node::Optional(_) => {
                         last_opt = Some(tree_bit);
                     }
                     _ => {
-                        cur_treenode = tree_bit;
+                        last_opt = None;
+                        cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
                     }
                 }
             });
@@ -55,14 +61,16 @@ fn handle_node(
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
             let t1 = handle_node(grammar, &n1.to_owned(), &cur_root);
             let t2 = handle_node(grammar, &n2.to_owned(), &t1);
-            t2
+            t1
         }
         Node::Symbol(n1, SymbolKind::Alternation, n2) => {
-            let t1 = handle_node(grammar, &n1.to_owned(), &cur_root);
-            let t2 = handle_node(grammar, &n2.to_owned(), &cur_root);
-            let child = TreeNode::new_null(Some(&t1));
-            child.borrow_mut().add_child(&t2);
-            child
+            let root = TreeNode::new_null(Some(cur_root));
+            let t1 = handle_node(grammar, &n1.to_owned(), &root);
+            let t2 = handle_node(grammar, &n2.to_owned(), &root);
+            let child = TreeNode::new_null(None);
+            t1.borrow_mut().add_child_to_all_leaves(&child);
+            t2.borrow_mut().add_child_to_all_leaves(&child);
+            root
         }
         Node::Group(node) => handle_node(grammar, node, cur_root),
         Node::Repeat(_) => {
