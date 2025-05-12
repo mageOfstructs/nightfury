@@ -43,6 +43,7 @@ fn handle_node(
                     last_opt.borrow().dbg();
                     tree_bit.borrow().dbg();
                     last_opt.borrow_mut().add_child_to_all_leaves(&tree_bit);
+                    last_opt.borrow_mut().handle_potential_conflict(&tree_bit);
                 }
                 match node {
                     Node::RegexExt(_, RegexExtKind::Optional) | Node::Optional(_) => {

@@ -318,7 +318,7 @@ impl TreeNode {
         }
         ret
     }
-    fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
+    pub fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
         if let Keyword(keyword_struct) = &child_borrow.value {
             debug_println!("{:?}", self.value);
