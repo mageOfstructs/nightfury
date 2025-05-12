@@ -74,7 +74,7 @@ fn handle_node(
             panic!("We got a Repeat node! go look at the bnf and see what it's supposed to be")
         }
         _ => {
-            println!("{cur_node:?}");
+            println!("Unimplemented: {cur_node:?}");
             todo!()
         }
     }
