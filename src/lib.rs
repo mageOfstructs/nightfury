@@ -182,6 +182,7 @@ impl TreeNode {
             self.add_child(child);
         }
     }
+    // FIXME: not aware of cycles
     pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
         for child in &self.children {
             if child.borrow().children.is_empty() {
