@@ -22,3 +22,8 @@ cargo run # debug build, very verbose logging
 ```sh
 cargo run --release # release build, almost no logging
 ```
+
+## Architecture
+
+- `lib` crate: actual logic, largely client-independent
+- `bin` crate: demo app, will be made into an example in the future
