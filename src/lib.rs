@@ -207,18 +207,26 @@ impl TreeNode {
             self.add_child(child);
         }
     }
-    // FIXME: not aware of cycles
-    pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
+
+    fn race_to_leaf_internal(
+        &self,
+        visited_nodes: &mut HashSet<Uuid>,
+    ) -> Option<Rc<RefCell<TreeNode>>> {
         for child in &self.children {
             if child.borrow().children.is_empty() {
                 return Some(child.clone());
-            } else {
-                if let Some(child) = child.borrow().race_to_leaf() {
+            } else if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                if let Some(child) = child.borrow().race_to_leaf_internal(visited_nodes) {
                     return Some(child);
                 }
             }
         }
         None
+    }
+    pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
+        let mut visited_nodes = HashSet::new();
+        self.race_to_leaf_internal(&mut visited_nodes)
     }
     pub fn dbg(&self) {
         self.dbg_internal(0);
