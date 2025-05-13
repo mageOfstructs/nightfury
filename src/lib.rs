@@ -1,7 +1,6 @@
 #![feature(let_chains)]
 
 use std::cell::RefCell;
-use std::ptr::eq;
 use std::rc::{Rc, Weak};
 
 pub mod frontend;
@@ -114,6 +113,7 @@ impl PartialMatch for Regex {
 use NodeType::*;
 use debug_print::debug_println;
 use regex::Regex;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeValue {
@@ -123,9 +123,21 @@ pub struct NodeValue {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TreeNode {
+    id: Uuid,
     value: NodeType,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
+}
+
+impl Default for TreeNode {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            value: Null,
+            parent: None,
+            children: Vec::new(),
+        }
+    }
 }
 
 impl TreeNode {
@@ -146,6 +158,7 @@ impl TreeNode {
             value: Null,
             parent: parent_ref,
             children: Vec::new(),
+            ..Default::default()
         }));
         if let Some(parent) = parent {
             parent.borrow_mut().add_child(&ret);
@@ -204,6 +217,7 @@ impl TreeNode {
             value,
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
+            ..Default::default()
         }));
         parent.borrow_mut().add_child(&ret);
         ret
@@ -214,6 +228,7 @@ impl TreeNode {
             value,
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
+            ..Default::default()
         }));
         parent.borrow_mut().add_child(&ret);
         ret
@@ -228,6 +243,7 @@ impl TreeNode {
             }),
             parent: None,
             children: Vec::new(),
+            ..Default::default()
         }))
     }
 
