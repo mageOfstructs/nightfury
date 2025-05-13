@@ -1,6 +1,7 @@
 #![feature(let_chains)]
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::{Rc, Weak};
 
 pub mod frontend;
@@ -172,16 +173,27 @@ impl TreeNode {
             child.borrow().dbg_internal(indent + 4);
         }
     }
-    fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
+
+    fn get_all_leaves_internal(
+        &self,
+        discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>,
+        visited_nodes: &mut HashSet<Uuid>,
+    ) {
         for child in &self.children {
-            debug_println!("at node {:?}", child.borrow().value);
+            debug_println!("at node {:?}; {}", child.borrow().value, child.borrow().id);
             if child.borrow().children.is_empty() {
                 debug_println!("adding node {:?}", child.borrow().value);
                 discovered_leaves.push(child.clone());
-            } else {
-                child.borrow().get_all_leaves(discovered_leaves);
+            } else if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                child
+                    .borrow()
+                    .get_all_leaves_internal(discovered_leaves, visited_nodes);
             }
         }
+    }
+    fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
+        self.get_all_leaves_internal(discovered_leaves, &mut HashSet::new());
     }
     pub fn add_child_to_all_leaves(&mut self, child: &Rc<RefCell<TreeNode>>) {
         let mut leaves = Vec::new();
