@@ -167,10 +167,15 @@ impl TreeNode {
         ret
     }
 
-    fn dbg_internal(&self, indent: usize) {
+    fn dbg_internal(&self, indent: usize, visited_nodes: &mut HashSet<Uuid>) {
         println!("{}{:?}", " ".repeat(indent), self.value);
         for child in self.children.iter() {
-            child.borrow().dbg_internal(indent + 4);
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                child.borrow().dbg_internal(indent + 4, visited_nodes);
+            } else {
+                println!("{}Cycle to {}", " ".repeat(indent + 4), child.borrow().id);
+            }
         }
     }
 
@@ -229,7 +234,7 @@ impl TreeNode {
         self.race_to_leaf_internal(&mut visited_nodes)
     }
     pub fn dbg(&self) {
-        self.dbg_internal(0);
+        self.dbg_internal(0, &mut HashSet::new());
     }
 
     pub fn new(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
