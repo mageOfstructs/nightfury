@@ -1,7 +1,7 @@
 #![feature(let_chains)]
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
 
 pub mod frontend;
@@ -122,12 +122,44 @@ pub struct NodeValue {
     pub optional: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct TreeNode {
     id: Uuid,
     value: NodeType,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
+}
+
+impl Clone for TreeNode {
+    fn clone(&self) -> Self {
+        let mut ret = Self {
+            id: self.id,
+            value: self.value.clone(),
+            parent: None, // is deprecated anyways
+            children: self.children.clone(),
+        };
+        let mut new_nodes = HashMap::new();
+        for i in 0..ret.children.len() {
+            let child = &ret.children[i];
+            let child = child.borrow();
+            if !new_nodes.contains_key(&child.id) {
+                let child_copy = Rc::new(RefCell::new(Self {
+                    id: child.id,
+                    value: child.value.clone(),
+                    parent: None, // is deprecated anyways
+                    children: child.children.clone(),
+                }));
+                new_nodes.insert(child_copy.borrow().id, child_copy.clone());
+                drop(child);
+                ret.children[i] = child_copy;
+            } else {
+                let id = child.id;
+                drop(child);
+                ret.children[i] = new_nodes.get(&id).unwrap().clone();
+            }
+        }
+        ret
+    }
 }
 
 impl Default for TreeNode {
