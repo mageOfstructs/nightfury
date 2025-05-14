@@ -16,6 +16,13 @@ fn main() {
     let ebnf = r"
         list ::= #'[0-9]' ( ',' list )?;
     ";
+    let ebnf = r"
+        query ::= select | insert;
+        select ::= 'SELECT' collist 'FROM' #'^.*;$';
+        insert ::= 'INSERT INTO' #'^.* $' ( '(' collist ')' )? 'VALUES' '(' collist ')';
+        collist ::= col ( ',' collist )?;
+        col ::= #'^.*[, ]$' | '*';
+    ";
     do_stuff(ebnf);
     if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
         root.borrow().dbg();

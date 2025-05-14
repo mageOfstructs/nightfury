@@ -122,44 +122,12 @@ pub struct NodeValue {
     pub optional: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TreeNode {
     id: Uuid,
     value: NodeType,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
-}
-
-impl Clone for TreeNode {
-    fn clone(&self) -> Self {
-        let mut ret = Self {
-            id: self.id,
-            value: self.value.clone(),
-            parent: None, // is deprecated anyways
-            children: self.children.clone(),
-        };
-        let mut new_nodes = HashMap::new();
-        for i in 0..ret.children.len() {
-            let child = &ret.children[i];
-            let child = child.borrow();
-            if !new_nodes.contains_key(&child.id) {
-                let child_copy = Rc::new(RefCell::new(Self {
-                    id: child.id,
-                    value: child.value.clone(),
-                    parent: None, // is deprecated anyways
-                    children: child.children.clone(),
-                }));
-                new_nodes.insert(child_copy.borrow().id, child_copy.clone());
-                drop(child);
-                ret.children[i] = child_copy;
-            } else {
-                let id = child.id;
-                drop(child);
-                ret.children[i] = new_nodes.get(&id).unwrap().clone();
-            }
-        }
-        ret
-    }
 }
 
 impl Default for TreeNode {
@@ -204,7 +172,12 @@ impl TreeNode {
     }
 
     fn dbg_internal(&self, indent: usize, visited_nodes: &mut HashSet<Uuid>) {
-        println!("{}{:?}", " ".repeat(indent), self.value);
+        println!(
+            "{}{:?} {}",
+            " ".repeat(indent),
+            self.value,
+            &self.id.simple().to_string()[0..6]
+        );
         for child in self.children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
@@ -589,7 +562,6 @@ impl TreeCursor {
                         closing_token: None,
                         ..
                     }) = &next_node.borrow().value
-                        && *short == String::from(input)
                     {
                         Some(expanded.clone())
                     } else {
