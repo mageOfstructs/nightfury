@@ -19,9 +19,11 @@ fn main() {
     let ebnf = r"
         query ::= select | insert;
         select ::= 'SELECT' collist 'FROM' #'^.*;$';
-        insert ::= 'INSERT INTO' #'^.* $' ( '(' collist ')' )? 'VALUES' '(' collist ')';
+        insert ::= 'INSERT INTO' #'^.* $' 'VALUES' '(' collist2 ')';
         collist ::= col ( ',' collist )?;
+        collist2 ::= col2 ( ',' collist2 )?;
         col ::= #'^.*[, ]$' | '*';
+        col2 ::= #'^.*[, ]$' | '*';
     ";
     do_stuff(ebnf);
     if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
