@@ -60,6 +60,7 @@ fn handle_node(
                     }
                     _ => {
                         last_opt = None;
+                        // FIXME: this can lead us astray if the we merged an already used Terminal into our path
                         cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
                     }
                 }
