@@ -149,6 +149,10 @@ impl TreeNode {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
     }
+    fn add_child_cycle_safe(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
+        while this.borrow().handle_potential_conflict(child) {}
+        this.borrow_mut().children.push(Rc::clone(&child));
+    }
     pub fn new_null(parent: Option<&Rc<RefCell<TreeNode>>>) -> Rc<RefCell<Self>> {
         let parent_ref = if let Some(parent) = parent {
             Some(Rc::clone(parent))
@@ -200,16 +204,16 @@ impl TreeNode {
     fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
         self.get_all_leaves_internal(discovered_leaves, &mut HashSet::new());
     }
-    pub fn add_child_to_all_leaves(&mut self, child: &Rc<RefCell<TreeNode>>) {
+    pub fn add_child_to_all_leaves(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
         let mut leaves = Vec::new();
-        self.get_all_leaves(&mut leaves);
+        this.borrow().get_all_leaves(&mut leaves);
         while let Some(node) = leaves.pop() {
             if node.borrow().children.is_empty() {
-                node.borrow_mut().add_child(&child);
+                TreeNode::add_child_cycle_safe(&node, child);
             }
         }
-        if self.children.is_empty() {
-            self.add_child(child);
+        if this.borrow().children.is_empty() {
+            this.borrow_mut().add_child(child);
         }
     }
 
@@ -333,7 +337,7 @@ impl TreeNode {
         }
         None
     }
-    fn handle_potential_conflict_internal(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
+    fn handle_potential_conflict_internal(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
         let mut ret = false;
         if let Keyword(Keyword { short: cshort, .. }) = &child_borrow.value {
@@ -360,7 +364,7 @@ impl TreeNode {
         }
         ret
     }
-    pub fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
+    pub fn handle_potential_conflict(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
         if let Keyword(keyword_struct) = &child_borrow.value {
             debug_println!("{:?}", self.value);
