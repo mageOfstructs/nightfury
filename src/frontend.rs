@@ -50,7 +50,7 @@ fn handle_node(
                 debug_println!("{node:?}");
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
                 if let Some(last_opt) = &last_opt {
-                    last_opt.borrow_mut().add_child_to_all_leaves(&tree_bit);
+                    TreeNode::add_child_to_all_leaves(&last_opt, &tree_bit);
                     // yes this needs to be here
                     last_opt.borrow_mut().handle_potential_conflict(&tree_bit);
                 }
@@ -80,8 +80,8 @@ fn handle_node(
             let t1 = handle_node(grammar, &n1.to_owned(), &root, terminals);
             let t2 = handle_node(grammar, &n2.to_owned(), &root, terminals);
             let child = TreeNode::new_null(None);
-            t1.borrow_mut().add_child_to_all_leaves(&child);
-            t2.borrow_mut().add_child_to_all_leaves(&child);
+            TreeNode::add_child_to_all_leaves(&t1, &child);
+            TreeNode::add_child_to_all_leaves(&t2, &child);
             root
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
@@ -101,13 +101,12 @@ fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expressi
 
 pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, String> {
     match ebnf::get_grammar(ebnf) {
-        Ok(mut grammar) => {
+        Ok(grammar) => {
             let root = TreeNode::new_null(None);
             let root_node = grammar.expressions.get(0).expect("Empty BNF!");
             let mut terminals: HashMap<String, Rc<RefCell<TreeNode>>> = HashMap::new();
             handle_node(&grammar, &root_node.rhs, &root, &mut terminals);
-            root.borrow_mut()
-                .add_child_to_all_leaves(&TreeNode::new_null(None));
+            TreeNode::add_child_to_all_leaves(&root, &TreeNode::new_null(None));
             Ok(root)
         }
         Err(err) => Err(err.to_string()),
