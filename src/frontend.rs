@@ -44,6 +44,7 @@ fn handle_node(
         }
         Node::Multiple(nodes) => {
             let mut cur_treenode = cur_root.clone();
+            // TODO: this doesn't handle multiple Optionals in a row!!! Make this a Vec instead
             let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
             nodes.iter().for_each(|node| {
                 debug_println!("{node:?}");
