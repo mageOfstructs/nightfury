@@ -142,6 +142,28 @@ impl Default for TreeNode {
 }
 
 impl TreeNode {
+    fn do_stuff_cycle_aware(&self, op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool) -> bool {
+        let mut visited_nodes = HashSet::new();
+        for child in &self.children {
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                if op(child.clone()) {
+                    return true;
+                }
+                if child.borrow().do_stuff_cycle_aware(op) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    pub fn has_useful_children(&self) -> bool {
+        self.do_stuff_cycle_aware(&mut |c| match c.borrow().value {
+            Null => false,
+            _ => true,
+        })
+    }
+
     pub fn get_last_child(&self) -> Option<Rc<RefCell<TreeNode>>> {
         self.children.last().cloned()
     }
@@ -605,7 +627,11 @@ impl TreeCursor {
             // we don't need to jump back if only one remains
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
         }
-        debug_println!("{:?}", self.get_cur_ast_binding().borrow().value);
+        debug_println!(
+            "uc: {:?} {}",
+            self.get_cur_ast_binding().borrow().value,
+            self.get_cur_ast_binding().borrow().id
+        );
     }
     fn dump(&self) {
         println!(
@@ -618,7 +644,10 @@ impl TreeCursor {
     pub fn is_done(&self) -> bool {
         let ast_ref = self.cur_ast_pos.upgrade().unwrap();
         let binding = ast_ref.borrow();
-        binding.children.is_empty()
+        match binding.value {
+            UserDefinedRegex(..) | UserDefined { .. } => false,
+            _ => binding.children.is_empty() || !binding.has_useful_children(),
+        }
     }
 
     fn get_cur_ast_binding(&self) -> Rc<RefCell<TreeNode>> {
@@ -632,6 +661,7 @@ impl TreeCursor {
     }
 
     fn get_current_nodeval(&self) -> NodeType {
+        println!("{}", self.get_cur_ast_binding().borrow().id);
         self.get_cur_ast_binding().borrow().value.clone()
     }
     fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
