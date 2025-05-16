@@ -3,16 +3,29 @@
 use std::io::Write;
 
 use console::Term;
-use lib::*;
+use lib::{frontend::do_stuff, *};
 use regex::Regex;
 
 fn main() {
+    // let ebnf = r"
+    //     syntax ::= ( signed_keyword )? types value;
+    //     signed_keyword ::= 'signed' | 'unsigned';
+    //     types ::= 'int' | 'short';
+    //     value ::= #'^.+;$';
+    // ";
     let ebnf = r"
-        syntax ::= ( signed_keyword )? types value;
-        signed_keyword ::= 'signed' | 'unsigned';
-        types ::= 'int' | 'short';
-        value ::= #'^.+;$';
+        list ::= #'[0-9]' ( ',' list )?;
     ";
+    let ebnf = r"
+        query ::= select | insert;
+        select ::= 'SELECT' collist 'FROM' #'^.*;$';
+        insert ::= 'INSERT INTO' #'^.* $' 'VALUES' '(' collist2 ')';
+        collist ::= col ( ',' collist )?;
+        collist2 ::= col2 ( ',' collist2 )?;
+        col ::= #'^.*[, ]$' | '*';
+        col2 ::= #'^.*[, ]$' | '*';
+    ";
+    do_stuff(ebnf);
     if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
         root.borrow().dbg();
         let mut cursor = TreeCursor::new(&root);
@@ -33,6 +46,8 @@ fn main() {
             }
             std::io::stdout().flush();
         }
+    } else {
+        eprintln!("Error while creating graph");
     }
     return;
     let root = TreeNode::new_null(None);

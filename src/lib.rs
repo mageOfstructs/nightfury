@@ -1,7 +1,7 @@
 #![feature(let_chains)]
 
 use std::cell::RefCell;
-use std::ptr::eq;
+use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
 
 pub mod frontend;
@@ -114,6 +114,7 @@ impl PartialMatch for Regex {
 use NodeType::*;
 use debug_print::debug_println;
 use regex::Regex;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeValue {
@@ -123,18 +124,56 @@ pub struct NodeValue {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TreeNode {
+    id: Uuid,
     value: NodeType,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
 }
 
+impl Default for TreeNode {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            value: Null,
+            parent: None,
+            children: Vec::new(),
+        }
+    }
+}
+
 impl TreeNode {
+    fn do_stuff_cycle_aware(&self, op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool) -> bool {
+        let mut visited_nodes = HashSet::new();
+        for child in &self.children {
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                if op(child.clone()) {
+                    return true;
+                }
+                if child.borrow().do_stuff_cycle_aware(op) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    fn has_useful_children(&self) -> bool {
+        self.do_stuff_cycle_aware(&mut |c| match c.borrow().value {
+            Null => false,
+            _ => true,
+        })
+    }
+
     pub fn get_last_child(&self) -> Option<Rc<RefCell<TreeNode>>> {
         self.children.last().cloned()
     }
     pub fn add_child(&mut self, child: &Rc<RefCell<TreeNode>>) {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
+    }
+    fn add_child_cycle_safe(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
+        while this.borrow().handle_potential_conflict(child) {}
+        this.borrow_mut().children.push(Rc::clone(&child));
     }
     pub fn new_null(parent: Option<&Rc<RefCell<TreeNode>>>) -> Rc<RefCell<Self>> {
         let parent_ref = if let Some(parent) = parent {
@@ -146,6 +185,7 @@ impl TreeNode {
             value: Null,
             parent: parent_ref,
             children: Vec::new(),
+            ..Default::default()
         }));
         if let Some(parent) = parent {
             parent.borrow_mut().add_child(&ret);
@@ -153,49 +193,78 @@ impl TreeNode {
         ret
     }
 
-    fn dbg_internal(&self, indent: usize) {
-        println!("{}{:?}", " ".repeat(indent), self.value);
+    fn short_id(&self) -> String {
+        self.id.simple().to_string()[0..6].to_string()
+    }
+
+    fn dbg_internal(&self, indent: usize, visited_nodes: &mut HashSet<Uuid>) {
+        println!("{}{:?} {}", " ".repeat(indent), self.value, self.short_id());
         for child in self.children.iter() {
-            child.borrow().dbg_internal(indent + 4);
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                child.borrow().dbg_internal(indent + 4, visited_nodes);
+            } else {
+                println!("{}Cycle to {}", " ".repeat(indent + 4), child.borrow().id);
+            }
         }
     }
-    fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
+
+    fn get_all_leaves_internal(
+        &self,
+        discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>,
+        visited_nodes: &mut HashSet<Uuid>,
+    ) {
         for child in &self.children {
-            debug_println!("at node {:?}", child.borrow().value);
+            debug_println!("at node {:?}; {}", child.borrow().value, child.borrow().id);
             if child.borrow().children.is_empty() {
                 debug_println!("adding node {:?}", child.borrow().value);
                 discovered_leaves.push(child.clone());
-            } else {
-                child.borrow().get_all_leaves(discovered_leaves);
+            } else if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                child
+                    .borrow()
+                    .get_all_leaves_internal(discovered_leaves, visited_nodes);
             }
         }
     }
-    pub fn add_child_to_all_leaves(&mut self, child: &Rc<RefCell<TreeNode>>) {
+    fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
+        self.get_all_leaves_internal(discovered_leaves, &mut HashSet::new());
+    }
+    pub fn add_child_to_all_leaves(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
         let mut leaves = Vec::new();
-        self.get_all_leaves(&mut leaves);
+        this.borrow().get_all_leaves(&mut leaves);
         while let Some(node) = leaves.pop() {
             if node.borrow().children.is_empty() {
-                node.borrow_mut().add_child(&child);
+                TreeNode::add_child_cycle_safe(&node, child);
             }
         }
-        if self.children.is_empty() {
-            self.add_child(child);
+        if this.borrow().children.is_empty() {
+            this.borrow_mut().add_child(child);
         }
     }
-    pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
+
+    fn race_to_leaf_internal(
+        &self,
+        visited_nodes: &mut HashSet<Uuid>,
+    ) -> Option<Rc<RefCell<TreeNode>>> {
         for child in &self.children {
             if child.borrow().children.is_empty() {
                 return Some(child.clone());
-            } else {
-                if let Some(child) = child.borrow().race_to_leaf() {
+            } else if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                if let Some(child) = child.borrow().race_to_leaf_internal(visited_nodes) {
                     return Some(child);
                 }
             }
         }
         None
     }
+    pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
+        let mut visited_nodes = HashSet::new();
+        self.race_to_leaf_internal(&mut visited_nodes)
+    }
     pub fn dbg(&self) {
-        self.dbg_internal(0);
+        self.dbg_internal(0, &mut HashSet::new());
     }
 
     pub fn new(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
@@ -203,6 +272,7 @@ impl TreeNode {
             value,
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
+            ..Default::default()
         }));
         parent.borrow_mut().add_child(&ret);
         ret
@@ -213,6 +283,7 @@ impl TreeNode {
             value,
             parent: Some(Rc::clone(parent)),
             children: Vec::new(),
+            ..Default::default()
         }));
         parent.borrow_mut().add_child(&ret);
         ret
@@ -227,6 +298,7 @@ impl TreeNode {
             }),
             parent: None,
             children: Vec::new(),
+            ..Default::default()
         }))
     }
 
@@ -291,7 +363,7 @@ impl TreeNode {
         }
         None
     }
-    fn handle_potential_conflict_internal(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
+    fn handle_potential_conflict_internal(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
         let mut ret = false;
         if let Keyword(Keyword { short: cshort, .. }) = &child_borrow.value {
@@ -318,7 +390,7 @@ impl TreeNode {
         }
         ret
     }
-    pub fn handle_potential_conflict(&mut self, child: &Rc<RefCell<TreeNode>>) -> bool {
+    pub fn handle_potential_conflict(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
         if let Keyword(keyword_struct) = &child_borrow.value {
             debug_println!("{:?}", self.value);
@@ -432,6 +504,11 @@ impl TreeCursor {
         // }
         // println!("search_rec: {:?}", treenode.borrow().value);
         // println!("{}\n", self.input_buf);
+        debug_println!(
+            "search_rec at {:?} {}",
+            treenode.borrow().value,
+            treenode.borrow().short_id()
+        );
         let binding = treenode;
         let borrow = binding.borrow();
         let mut keyword_match = None;
@@ -485,6 +562,11 @@ impl TreeCursor {
     pub fn advance(&mut self, input: char) -> Option<String> {
         let binding = self.cur_ast_pos.upgrade().expect("Tree failure");
         let borrow = binding.borrow();
+        debug_println!(
+            "advance with cursor {:?} {}",
+            borrow.value,
+            borrow.short_id()
+        );
         self.input_buf.push(input);
         match &borrow.value {
             NodeType::UserDefined { final_chars, .. } => {
@@ -494,24 +576,26 @@ impl TreeCursor {
                 }
             }
             NodeType::UserDefinedRegex(r) => {
-                debug_println!("{}", &self.input_buf);
+                debug_println!("Checking regex against '{}'", &self.input_buf);
                 if r.is_match(&self.input_buf) {
                     let strong_ref = self.get_cur_ast_binding();
+                    self.input_buf.clear();
+                    self.input_buf.push(input);
+                    let mut next_node = self.search_rec(&strong_ref, &mut 0);
                     let borrow = strong_ref.borrow();
-                    let next_node = Rc::clone(
-                        &borrow
-                            .children
-                            .get(0)
-                            .expect("UserDefinedRegex doesn't have a child and is therefore sad"),
-                    );
+                    if next_node.is_none() {
+                        next_node =
+                            Some(Rc::clone(&borrow.children.get(0).expect(
+                                "UserDefinedRegex doesn't have a child and is therefore sad",
+                            )));
+                    }
+                    let next_node = next_node.unwrap();
                     self.update_cursor(&next_node);
                     let ret = if let NodeType::Keyword(Keyword {
-                        short,
                         expanded,
                         closing_token: None,
                         ..
                     }) = &next_node.borrow().value
-                        && *short == String::from(input)
                     {
                         Some(expanded.clone())
                     } else {
@@ -555,7 +639,11 @@ impl TreeCursor {
             // we don't need to jump back if only one remains
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
         }
-        debug_println!("{:?}", self.get_cur_ast_binding().borrow().value);
+        debug_println!(
+            "uc: {:?} {}",
+            self.get_cur_ast_binding().borrow().value,
+            self.get_cur_ast_binding().borrow().id
+        );
     }
     fn dump(&self) {
         println!(
@@ -568,7 +656,10 @@ impl TreeCursor {
     pub fn is_done(&self) -> bool {
         let ast_ref = self.cur_ast_pos.upgrade().unwrap();
         let binding = ast_ref.borrow();
-        binding.children.is_empty()
+        match binding.value {
+            UserDefinedRegex(..) | UserDefined { .. } => false,
+            _ => binding.children.is_empty() || !binding.has_useful_children(),
+        }
     }
 
     fn get_cur_ast_binding(&self) -> Rc<RefCell<TreeNode>> {
@@ -582,6 +673,7 @@ impl TreeCursor {
     }
 
     fn get_current_nodeval(&self) -> NodeType {
+        println!("{}", self.get_cur_ast_binding().borrow().id);
         self.get_cur_ast_binding().borrow().value.clone()
     }
     fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
