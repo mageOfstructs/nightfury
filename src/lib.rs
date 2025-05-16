@@ -14,6 +14,9 @@ impl NameShortener {
             panic!("Cannot expand the void!")
         }
         let ret = if let Some(old) = old {
+            if old == full {
+                return old.to_string(); // FIXME: this can't be a good handling
+            }
             if full.len() < old.len() {
                 panic!("NS: There is nothing left...")
             }
@@ -143,14 +146,23 @@ impl Default for TreeNode {
 
 impl TreeNode {
     fn do_stuff_cycle_aware(&self, op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool) -> bool {
-        let mut visited_nodes = HashSet::new();
+        self.do_stuff_cycle_aware_internal(op, &mut HashSet::new())
+    }
+    fn do_stuff_cycle_aware_internal(
+        &self,
+        op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool,
+        visited_nodes: &mut HashSet<Uuid>,
+    ) -> bool {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
                 if op(child.clone()) {
                     return true;
                 }
-                if child.borrow().do_stuff_cycle_aware(op) {
+                if child
+                    .borrow()
+                    .do_stuff_cycle_aware_internal(op, visited_nodes)
+                {
                     return true;
                 }
             }
@@ -171,7 +183,7 @@ impl TreeNode {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
     }
-    fn add_child_cycle_safe(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
+    pub fn add_child_cycle_safe(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
         while this.borrow().handle_potential_conflict(child) {}
         this.borrow_mut().children.push(Rc::clone(&child));
     }
@@ -239,7 +251,7 @@ impl TreeNode {
             }
         }
         if this.borrow().children.is_empty() {
-            this.borrow_mut().add_child(child);
+            TreeNode::add_child_cycle_safe(&this, child);
         }
     }
 
@@ -308,7 +320,7 @@ impl TreeNode {
     ) -> Rc<RefCell<Self>> {
         let ret = Self::new_keyword(expanded_name);
         ret.borrow_mut().parent = Some(Rc::clone(&parent));
-        parent.borrow_mut().add_child(&ret);
+        TreeNode::add_child_cycle_safe(&parent, &ret);
         ret
     }
     fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
@@ -346,22 +358,36 @@ impl TreeNode {
     }
 
     fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
-        for child in &self.children {
-            let borrow = child.borrow();
-            match &borrow.value {
+        let mut ret = None;
+        // FIXME: do_stuff_cycle_aware is way to generic and will also ask all children of non-null
+        // Nodes
+        self.do_stuff_cycle_aware(&mut |child: Rc<RefCell<TreeNode>>| {
+            println!("awa?");
+            match &child.borrow().value {
                 Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
-                    return Some(Rc::clone(&child));
+                    ret = Some(Rc::clone(&child));
+                    return true;
                 }
-                Null => {
-                    let rec_res = borrow.get_conflicting_node(short);
-                    if rec_res.is_some() {
-                        return rec_res;
-                    }
-                }
-                _ => {}
+                _ => false,
             }
-        }
-        None
+        });
+        ret
+        // for child in &self.children {
+        //     let borrow = child.borrow();
+        //     match &borrow.value {
+        //         Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
+        //             return Some(Rc::clone(&child));
+        //         }
+        //         Null => {
+        //             let rec_res = borrow.get_conflicting_node(short);
+        //             if rec_res.is_some() {
+        //                 return rec_res;
+        //             }
+        //         }
+        //         _ => {}
+        //     }
+        // }
+        // None
     }
     fn handle_potential_conflict_internal(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
