@@ -157,7 +157,7 @@ impl TreeNode {
         }
         false
     }
-    pub fn has_useful_children(&self) -> bool {
+    fn has_useful_children(&self) -> bool {
         self.do_stuff_cycle_aware(&mut |c| match c.borrow().value {
             Null => false,
             _ => true,
