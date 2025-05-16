@@ -193,13 +193,12 @@ impl TreeNode {
         ret
     }
 
+    fn short_id(&self) -> String {
+        self.id.simple().to_string()[0..6].to_string()
+    }
+
     fn dbg_internal(&self, indent: usize, visited_nodes: &mut HashSet<Uuid>) {
-        println!(
-            "{}{:?} {}",
-            " ".repeat(indent),
-            self.value,
-            &self.id.simple().to_string()[0..6]
-        );
+        println!("{}{:?} {}", " ".repeat(indent), self.value, self.short_id());
         for child in self.children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
@@ -505,6 +504,11 @@ impl TreeCursor {
         // }
         // println!("search_rec: {:?}", treenode.borrow().value);
         // println!("{}\n", self.input_buf);
+        debug_println!(
+            "search_rec at {:?} {}",
+            treenode.borrow().value,
+            treenode.borrow().short_id()
+        );
         let binding = treenode;
         let borrow = binding.borrow();
         let mut keyword_match = None;
@@ -558,6 +562,11 @@ impl TreeCursor {
     pub fn advance(&mut self, input: char) -> Option<String> {
         let binding = self.cur_ast_pos.upgrade().expect("Tree failure");
         let borrow = binding.borrow();
+        debug_println!(
+            "advance with cursor {:?} {}",
+            borrow.value,
+            borrow.short_id()
+        );
         self.input_buf.push(input);
         match &borrow.value {
             NodeType::UserDefined { final_chars, .. } => {
@@ -567,19 +576,22 @@ impl TreeCursor {
                 }
             }
             NodeType::UserDefinedRegex(r) => {
-                debug_println!("{}", &self.input_buf);
+                debug_println!("Checking regex against '{}'", &self.input_buf);
                 if r.is_match(&self.input_buf) {
                     let strong_ref = self.get_cur_ast_binding();
+                    self.input_buf.clear();
+                    self.input_buf.push(input);
+                    let mut next_node = self.search_rec(&strong_ref, &mut 0);
                     let borrow = strong_ref.borrow();
-                    let next_node = Rc::clone(
-                        &borrow
-                            .children
-                            .get(0)
-                            .expect("UserDefinedRegex doesn't have a child and is therefore sad"),
-                    );
+                    if next_node.is_none() {
+                        next_node =
+                            Some(Rc::clone(&borrow.children.get(0).expect(
+                                "UserDefinedRegex doesn't have a child and is therefore sad",
+                            )));
+                    }
+                    let next_node = next_node.unwrap();
                     self.update_cursor(&next_node);
                     let ret = if let NodeType::Keyword(Keyword {
-                        short,
                         expanded,
                         closing_token: None,
                         ..

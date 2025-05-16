@@ -19,6 +19,7 @@ fn handle_node(
     cur_root: &Rc<RefCell<TreeNode>>,
     terminals: &mut HashMap<String, Rc<RefCell<TreeNode>>>,
 ) -> Rc<RefCell<TreeNode>> {
+    debug_println!("handle_node got {:?}", cur_node);
     match &cur_node {
         Node::String(str) => {
             TreeNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root))
