@@ -107,6 +107,7 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, Strin
             let root_node = grammar.expressions.get(0).expect("Empty BNF!");
             let mut terminals: HashMap<String, Rc<RefCell<TreeNode>>> = HashMap::new();
             handle_node(&grammar, &root_node.rhs, &root, &mut terminals);
+            // sanity op, is_done() won't cancel preemptively
             TreeNode::add_child_to_all_leaves(&root, &TreeNode::new_null(None));
             Ok(root)
         }
