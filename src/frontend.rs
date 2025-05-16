@@ -31,13 +31,17 @@ fn handle_node(
         Node::Terminal(name) => {
             if terminals.contains_key(name) {
                 debug_println!("Found {name} in cache!");
-                cur_root
-                    .borrow_mut()
-                    .add_child(terminals.get(name).unwrap());
+                TreeNode::add_child_cycle_safe(cur_root, terminals.get(name).unwrap());
+                // cur_root
+                //     .borrow_mut()
+                //     .add_child(terminals.get(name).unwrap());
                 Rc::clone(&terminals.get(name).unwrap())
             } else {
-                let terminal =
-                    find_terminal(&grammar, &name).expect("Terminal reference not found!");
+                let terminal = find_terminal(&grammar, &name);
+                if terminal.is_none() {
+                    panic!("Terminal reference '{name}' not found!");
+                }
+                let terminal = terminal.unwrap();
                 let term_root = TreeNode::new_null(Some(cur_root));
                 terminals.insert(name.to_string(), Rc::clone(&term_root));
                 handle_node(grammar, &terminal.rhs, &term_root, terminals)
@@ -53,7 +57,7 @@ fn handle_node(
                 if let Some(last_opt) = &last_opt {
                     TreeNode::add_child_to_all_leaves(&last_opt, &tree_bit);
                     // yes this needs to be here
-                    last_opt.borrow_mut().handle_potential_conflict(&tree_bit);
+                    last_opt.borrow().handle_potential_conflict(&tree_bit);
                 }
                 match node {
                     Node::RegexExt(_, RegexExtKind::Optional) | Node::Optional(_) => {
@@ -87,8 +91,12 @@ fn handle_node(
             root
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
-        Node::Repeat(_) => {
-            panic!("We got a Repeat node! go look at the bnf and see what it's supposed to be")
+        Node::Repeat(node) => {
+            let subroot = handle_node(grammar, &node, cur_root, terminals);
+            TreeNode::add_child_cycle_safe(&subroot, &subroot);
+            // subroot.borrow().add_child(&subroot); // this will crash so hard
+            subroot
+            // panic!("We got a Repeat node! go look at the bnf and see what it's supposed to be")
         }
         _ => {
             println!("Unimplemented: {cur_node:?}");
