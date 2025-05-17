@@ -533,19 +533,25 @@ impl TreeCursor {
         &self,
         treenode: &Rc<RefCell<TreeNode>>,
     ) -> Option<Rc<RefCell<TreeNode>>> {
-        for child in &treenode.borrow().children {
-            match child.borrow().value {
-                UserDefined { .. } | UserDefinedRegex { .. } => return Some(child.clone()),
-                Null => {
-                    let rec_res = self.search_for_userdefs(&child);
-                    if rec_res.is_some() {
-                        return rec_res;
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
+        treenode
+            .borrow()
+            .do_stuff_cycle_aware_non_greedy(&mut |child| match child.borrow().value {
+                UserDefined { .. } | UserDefinedRegex { .. } => true,
+                _ => false,
+            })
+        // for child in &treenode.borrow().children {
+        //     match child.borrow().value {
+        //         UserDefined { .. } | UserDefinedRegex { .. } => return Some(child.clone()),
+        //         Null => {
+        //             let rec_res = self.search_for_userdefs(&child);
+        //             if rec_res.is_some() {
+        //                 return rec_res;
+        //             }
+        //         }
+        //         _ => {}
+        //     }
+        // }
+        // None
     }
     pub fn search_rec(
         &self,
@@ -565,33 +571,63 @@ impl TreeCursor {
         let binding = treenode;
         let borrow = binding.borrow();
         let mut keyword_match = None;
-        for child in &borrow.children {
-            let node_val = &child.borrow().value;
-            match node_val {
-                NodeType::Keyword(Keyword { short, .. }) if short.starts_with(&self.input_buf) => {
-                    debug_println!("{:?}", child.borrow().value);
-                    debug_println!("{short} == {}", self.input_buf);
-                    keyword_match = Some(child.clone());
-                    *potential_matches += 1;
-                    if *potential_matches > 1 {
-                        break;
+        treenode
+            .borrow()
+            .do_stuff_cycle_aware_non_greedy(&mut |child| {
+                let node_val = &child.borrow().value;
+                match node_val {
+                    NodeType::Keyword(Keyword { short, .. })
+                        if short.starts_with(&self.input_buf) =>
+                    {
+                        debug_println!("{:?}", child.borrow().value);
+                        debug_println!("{short} == {}", self.input_buf);
+                        keyword_match = Some(child.clone());
+                        *potential_matches += 1;
+                        *potential_matches > 1
                     }
+                    // Null => {
+                    //     debug_println!("RecParent: {:?}", child.borrow().value);
+                    //     let rec_res = self.search_rec(&child, potential_matches);
+                    //     if rec_res.is_some() {
+                    //         debug_println!(
+                    //             "Recursive: {:?}",
+                    //             rec_res.as_ref().unwrap().borrow().value
+                    //         );
+                    //         // *potential_matches += 1;
+                    //         keyword_match = rec_res;
+                    //         false
+                    //     }
+                    // }
+                    _ => false,
                 }
-                Null => {
-                    debug_println!("RecParent: {:?}", child.borrow().value);
-                    let rec_res = self.search_rec(&child, potential_matches);
-                    if rec_res.is_some() {
-                        debug_println!("Recursive: {:?}", rec_res.as_ref().unwrap().borrow().value);
-                        // *potential_matches += 1;
-                        keyword_match = rec_res;
-                        if *potential_matches > 1 {
-                            break;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+            });
+        // for child in &borrow.children {
+        //     let node_val = &child.borrow().value;
+        //     match node_val {
+        //         NodeType::Keyword(Keyword { short, .. }) if short.starts_with(&self.input_buf) => {
+        //             debug_println!("{:?}", child.borrow().value);
+        //             debug_println!("{short} == {}", self.input_buf);
+        //             keyword_match = Some(child.clone());
+        //             *potential_matches += 1;
+        //             if *potential_matches > 1 {
+        //                 break;
+        //             }
+        //         }
+        //         Null => {
+        //             debug_println!("RecParent: {:?}", child.borrow().value);
+        //             let rec_res = self.search_rec(&child, potential_matches);
+        //             if rec_res.is_some() {
+        //                 debug_println!("Recursive: {:?}", rec_res.as_ref().unwrap().borrow().value);
+        //                 // *potential_matches += 1;
+        //                 keyword_match = rec_res;
+        //                 if *potential_matches > 1 {
+        //                     break;
+        //                 }
+        //             }
+        //         }
+        //         _ => {}
+        //     }
+        // }
         debug_println!("pm: {potential_matches}");
         if keyword_match.is_some() && *potential_matches == 1 {
             return keyword_match;
