@@ -28,11 +28,11 @@ fn main() {
     let sql = r##"
     sql ::= statement { statement };
 
-statement ::= select_statement | insert_statement | update_statement | delete_statement | create_statement | drop_statement | alter_statement | transaction_statement;
+statement ::= (select_statement | insert_statement | update_statement | delete_statement | create_statement | drop_statement | alter_statement | transaction_statement) ';';
 
 select_statement ::= "SELECT" select_list "FROM" table_reference [ where_clause ] [ group_by_clause ] [ order_by_clause ];
 
-select_list ::= "*" | column_name { "," column_name };
+select_list ::= "*" | ( column_name { "," column_name } );
 
 table_reference ::= table_name [ alias ] { "," table_name [ alias ] };
 
