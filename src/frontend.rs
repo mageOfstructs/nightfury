@@ -60,12 +60,15 @@ fn handle_node(
                     last_opt.borrow().handle_potential_conflict(&tree_bit);
                 }
                 match node {
-                    Node::RegexExt(_, RegexExtKind::Optional) | Node::Optional(_) => {
+                    Node::RegexExt(_, RegexExtKind::Optional)
+                    | Node::Optional(_)
+                    | Node::Repeat(_) => {
                         last_opt = Some(tree_bit);
                     }
                     _ => {
                         last_opt = None;
                         // FIXME: this can lead us astray if the we merged an already used Terminal into our path
+                        // I don't think this is even a problem anymore
                         cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
                     }
                 }
@@ -92,6 +95,7 @@ fn handle_node(
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
         Node::Repeat(node) => {
+            // FIXME: repeats can apparently also mean 0
             let subroot = handle_node(grammar, &node, cur_root, terminals);
             TreeNode::add_child_cycle_safe(&subroot, &subroot);
             // subroot.borrow().add_child(&subroot); // this will crash so hard
