@@ -169,6 +169,35 @@ impl TreeNode {
         }
         false
     }
+
+    fn do_stuff_cycle_aware_non_greedy(
+        &self,
+        op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool,
+    ) -> Option<Rc<RefCell<TreeNode>>> {
+        self.do_stuff_cycle_aware_non_greedy_internal(op, &mut HashSet::new())
+    }
+    fn do_stuff_cycle_aware_non_greedy_internal(
+        &self,
+        op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool,
+        visited_nodes: &mut HashSet<Uuid>,
+    ) -> Option<Rc<RefCell<TreeNode>>> {
+        for child in &self.children {
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                if op(child.clone()) {
+                    return Some(child.clone());
+                }
+                if let Null = child.borrow().value
+                    && let Some(ret) = child
+                        .borrow()
+                        .do_stuff_cycle_aware_non_greedy_internal(op, visited_nodes)
+                {
+                    return Some(ret);
+                }
+            }
+        }
+        None
+    }
     fn has_useful_children(&self) -> bool {
         self.do_stuff_cycle_aware(&mut |c| match c.borrow().value {
             Null => false,
@@ -358,20 +387,18 @@ impl TreeNode {
     }
 
     fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
-        let mut ret = None;
         // FIXME: do_stuff_cycle_aware is way to generic and will also ask all children of non-null
         // Nodes
-        self.do_stuff_cycle_aware(&mut |child: Rc<RefCell<TreeNode>>| {
+        // Should be fine now, but keep this warning here in case it's not
+        self.do_stuff_cycle_aware_non_greedy(&mut |child: Rc<RefCell<TreeNode>>| {
             println!("awa?");
             match &child.borrow().value {
                 Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
-                    ret = Some(Rc::clone(&child));
                     return true;
                 }
                 _ => false,
             }
-        });
-        ret
+        })
         // for child in &self.children {
         //     let borrow = child.borrow();
         //     match &borrow.value {
