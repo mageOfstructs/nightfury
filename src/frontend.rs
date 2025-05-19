@@ -6,7 +6,7 @@ use regex::Regex;
 
 use crate::TreeNode;
 
-pub fn do_stuff(syntax: &str) {
+pub fn print_parsed_ebnf(syntax: &str) {
     let grammar = ebnf::get_grammar(&syntax).unwrap();
     for node in grammar.expressions {
         println!("{:?}", node);
@@ -31,11 +31,14 @@ fn handle_node(
         Node::Terminal(name) => {
             if terminals.contains_key(name) {
                 debug_println!("Found {name} in cache!");
-                TreeNode::add_child_cycle_safe(cur_root, terminals.get(name).unwrap());
+                let term_clone = Rc::new(RefCell::new(
+                    terminals.get(name).unwrap().borrow().deep_clone(),
+                ));
+                TreeNode::add_child_cycle_safe(cur_root, &term_clone);
                 // cur_root
                 //     .borrow_mut()
                 //     .add_child(terminals.get(name).unwrap());
-                Rc::clone(&terminals.get(name).unwrap())
+                term_clone
             } else {
                 let terminal = find_terminal(&grammar, &name);
                 if terminal.is_none() {
