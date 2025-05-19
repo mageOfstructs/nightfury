@@ -167,29 +167,29 @@ impl TreeNode {
     fn do_stuff_cycle_aware(
         &self,
         op: &mut impl FnMut(&TreeNode, Rc<RefCell<TreeNode>>) -> bool,
-    ) -> bool {
+    ) -> Option<Rc<RefCell<TreeNode>>> {
         self.do_stuff_cycle_aware_internal(op, &mut HashSet::new())
     }
     fn do_stuff_cycle_aware_internal(
         &self,
         op: &mut impl FnMut(&TreeNode, Rc<RefCell<TreeNode>>) -> bool,
         visited_nodes: &mut HashSet<Uuid>,
-    ) -> bool {
+    ) -> Option<Rc<RefCell<TreeNode>>> {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
                 if op(self, child.clone()) {
-                    return true;
+                    return Some(child.clone());
                 }
-                if child
+                if let Some(child) = child
                     .borrow()
                     .do_stuff_cycle_aware_internal(op, visited_nodes)
                 {
-                    return true;
+                    return Some(child);
                 }
             }
         }
-        false
+        None
     }
 
     fn do_stuff_cycle_aware_non_greedy(
@@ -225,6 +225,7 @@ impl TreeNode {
             Null => false,
             _ => true,
         })
+        .is_some()
     }
 
     pub fn get_last_child(&self) -> Option<Rc<RefCell<TreeNode>>> {
@@ -306,25 +307,8 @@ impl TreeNode {
         }
     }
 
-    fn race_to_leaf_internal(
-        &self,
-        visited_nodes: &mut HashSet<Uuid>,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
-        for child in &self.children {
-            if child.borrow().children.is_empty() {
-                return Some(child.clone());
-            } else if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
-                if let Some(child) = child.borrow().race_to_leaf_internal(visited_nodes) {
-                    return Some(child);
-                }
-            }
-        }
-        None
-    }
     pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
-        let mut visited_nodes = HashSet::new();
-        self.race_to_leaf_internal(&mut visited_nodes)
+        self.do_stuff_cycle_aware(&mut |_, child| child.borrow().children.is_empty())
     }
     pub fn dbg(&self) {
         self.dbg_internal(0, &mut HashSet::new());
