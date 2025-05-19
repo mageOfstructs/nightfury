@@ -145,18 +145,40 @@ impl Default for TreeNode {
 }
 
 impl TreeNode {
-    fn do_stuff_cycle_aware(&self, op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool) -> bool {
+    fn deep_clone(&self) -> Self {
+        debug_println!("Deep cloning node {}", self.short_id());
+        let mut ret = Self {
+            id: Uuid::new_v4(),
+            value: self.value.clone(),
+            parent: None, // is deprecated anyways
+            children: Vec::new(),
+        };
+        let mut visited_nodes = HashSet::new();
+        for child in &self.children {
+            if !visited_nodes.contains(&child.borrow().id) {
+                // FIXME: might not fix cycles
+                visited_nodes.insert(child.borrow().id);
+                ret.children
+                    .push(Rc::new(RefCell::new(child.borrow().deep_clone())));
+            }
+        }
+        ret
+    }
+    fn do_stuff_cycle_aware(
+        &self,
+        op: &mut impl FnMut(&TreeNode, Rc<RefCell<TreeNode>>) -> bool,
+    ) -> bool {
         self.do_stuff_cycle_aware_internal(op, &mut HashSet::new())
     }
     fn do_stuff_cycle_aware_internal(
         &self,
-        op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool,
+        op: &mut impl FnMut(&TreeNode, Rc<RefCell<TreeNode>>) -> bool,
         visited_nodes: &mut HashSet<Uuid>,
     ) -> bool {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
-                if op(child.clone()) {
+                if op(self, child.clone()) {
                     return true;
                 }
                 if child
@@ -199,7 +221,7 @@ impl TreeNode {
         None
     }
     fn has_useful_children(&self) -> bool {
-        self.do_stuff_cycle_aware(&mut |c| match c.borrow().value {
+        self.do_stuff_cycle_aware(&mut |_, c| match c.borrow().value {
             Null => false,
             _ => true,
         })
@@ -387,9 +409,6 @@ impl TreeNode {
     }
 
     fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
-        // FIXME: do_stuff_cycle_aware is way to generic and will also ask all children of non-null
-        // Nodes
-        // Should be fine now, but keep this warning here in case it's not
         self.do_stuff_cycle_aware_non_greedy(&mut |child: Rc<RefCell<TreeNode>>| {
             println!("awa?");
             match &child.borrow().value {
@@ -399,22 +418,6 @@ impl TreeNode {
                 _ => false,
             }
         })
-        // for child in &self.children {
-        //     let borrow = child.borrow();
-        //     match &borrow.value {
-        //         Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
-        //             return Some(Rc::clone(&child));
-        //         }
-        //         Null => {
-        //             let rec_res = borrow.get_conflicting_node(short);
-        //             if rec_res.is_some() {
-        //                 return rec_res;
-        //             }
-        //         }
-        //         _ => {}
-        //     }
-        // }
-        // None
     }
     fn handle_potential_conflict_internal(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
         let child_borrow = child.borrow();
