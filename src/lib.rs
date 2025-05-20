@@ -874,8 +874,27 @@ mod tests {
         let types = TreeNode::new_required(NodeType::Null, &child);
         println!("hi?");
         TreeNode::add_child_cycle_safe(&types, &root);
-        root.borrow().dbg();
-        root.borrow().deep_clone().dbg();
-        assert!(false);
+        let cloned_root = root.borrow().deep_clone();
+        let root = root.borrow();
+        let cloned_root = cloned_root.borrow();
+        assert_eq!(root.value, cloned_root.value);
+        // TODO: make this go all the way through the tree
+        for (i, child) in root.children.iter().enumerate() {
+            assert_eq!(child.borrow().value, cloned_root.children[i].borrow().value);
+        }
+    }
+
+    #[test]
+    fn simple_full() {
+        let bnf = r"
+        t1 ::= t2 | t3;
+        t2 ::= 'r' t3;
+        t3 ::= 'a';
+        ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!("r", cursor.advance('r').unwrap());
+        assert_eq!("a", cursor.advance('a').unwrap());
+        assert!(cursor.is_done());
     }
 }
