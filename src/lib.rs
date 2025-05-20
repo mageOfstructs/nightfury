@@ -284,9 +284,9 @@ impl TreeNode {
 
     fn dbg_internal(&self, indent: usize, visited_nodes: &mut HashSet<Uuid>) {
         println!("{}{:?} {}", " ".repeat(indent), self.value, self.short_id());
+        visited_nodes.insert(self.id);
         for child in self.children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
                 child.borrow().dbg_internal(indent + 4, visited_nodes);
             } else {
                 println!("{}Cycle to {}", " ".repeat(indent + 4), child.borrow().id);
