@@ -31,13 +31,17 @@ fn handle_node(
         Node::Terminal(name) => {
             if terminals.contains_key(name) {
                 debug_println!("Found {name} in cache!");
-                let term_clone = Rc::new(RefCell::new(
-                    terminals.get(name).unwrap().borrow().deep_clone(),
-                ));
+                // let term_clone = Rc::new(RefCell::new(
+                //     terminals.get(name).unwrap().borrow().deep_clone(),
+                // ));
+                let term_clone = terminals.get(name).unwrap().clone();
+                println!("cur_root:");
+                cur_root.borrow().dbg();
+                println!("term:");
+                term_clone.borrow().dbg();
                 TreeNode::add_child_cycle_safe(cur_root, &term_clone);
-                // cur_root
-                //     .borrow_mut()
-                //     .add_child(terminals.get(name).unwrap());
+                println!("after add:");
+                cur_root.borrow().dbg();
                 term_clone
             } else {
                 let terminal = find_terminal(&grammar, &name);
@@ -47,7 +51,10 @@ fn handle_node(
                 let terminal = terminal.unwrap();
                 let term_root = TreeNode::new_null(Some(cur_root));
                 terminals.insert(name.to_string(), Rc::clone(&term_root));
-                handle_node(grammar, &terminal.rhs, &term_root, terminals)
+                handle_node(grammar, &terminal.rhs, &term_root, terminals);
+                println!("young {}:", name);
+                term_root.borrow().dbg();
+                term_root.borrow().deep_clone()
             }
         }
         Node::Multiple(nodes) => {
@@ -71,7 +78,6 @@ fn handle_node(
                     _ => {
                         last_opt = None;
                         // FIXME: this can lead us astray if the we merged an already used Terminal into our path
-                        // I don't think this is even a problem anymore
                         cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
                     }
                 }
@@ -125,6 +131,10 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, Strin
             handle_node(&grammar, &root_node.rhs, &root, &mut terminals);
             // sanity op, is_done() won't cancel preemptively
             TreeNode::add_child_to_all_leaves(&root, &TreeNode::new_null(None));
+            for (name, term) in terminals.iter() {
+                println!("Term {}", name);
+                term.borrow().dbg();
+            }
             Ok(root)
         }
         Err(err) => Err(err.to_string()),
