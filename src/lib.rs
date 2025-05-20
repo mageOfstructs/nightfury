@@ -145,23 +145,41 @@ impl Default for TreeNode {
 }
 
 impl TreeNode {
-    fn deep_clone(&self) -> Self {
+    fn deep_clone_internal(
+        stub: &Rc<RefCell<Self>>,
+        old: &TreeNode,
+        visited_nodes: &mut HashMap<Uuid, Rc<RefCell<TreeNode>>>,
+    ) -> Rc<RefCell<Self>> {
+        for child in &old.children {
+            if !visited_nodes.contains_key(&child.borrow().id) {
+                let clone = Rc::new(RefCell::new(Self {
+                    id: child.borrow().id,
+                    value: child.borrow().value.clone(),
+                    parent: None, // is deprecated anyways
+                    children: Vec::new(),
+                }));
+                visited_nodes.insert(child.borrow().id, clone.clone());
+                TreeNode::deep_clone_internal(&clone, &child.borrow(), visited_nodes);
+                stub.borrow_mut().children.push(clone);
+            } else {
+                stub.borrow_mut()
+                    .children
+                    .push(visited_nodes.get(&child.borrow().id).unwrap().clone());
+            }
+        }
+        stub.clone()
+    }
+    // TODO: make deep_clone private
+    pub fn deep_clone(&self) -> Rc<RefCell<Self>> {
         debug_println!("Deep cloning node {}", self.short_id());
-        let mut ret = Self {
-            id: Uuid::new_v4(),
+        let ret = Rc::new(RefCell::new(Self {
+            id: self.id,
             value: self.value.clone(),
             parent: None, // is deprecated anyways
             children: Vec::new(),
-        };
-        let mut visited_nodes = HashSet::new();
-        for child in &self.children {
-            if !visited_nodes.contains(&child.borrow().id) {
-                // FIXME: might not fix cycles
-                visited_nodes.insert(child.borrow().id);
-                ret.children
-                    .push(Rc::new(RefCell::new(child.borrow().deep_clone())));
-            }
-        }
+        }));
+        let ret = TreeNode::deep_clone_internal(&ret, self, &mut HashMap::new());
+        debug_println!("Finish deep clone");
         ret
     }
     fn do_stuff_cycle_aware(
@@ -279,9 +297,9 @@ impl TreeNode {
         visited_nodes: &mut HashSet<Uuid>,
     ) {
         for child in &self.children {
-            debug_println!("at node {:?}; {}", child.borrow().value, child.borrow().id);
+            // debug_println!("at node {:?}; {}", child.borrow().value, child.borrow().id);
             if child.borrow().children.is_empty() {
-                debug_println!("adding node {:?}", child.borrow().value);
+                // debug_println!("adding node {:?}", child.borrow().value);
                 discovered_leaves.push(child.clone());
             } else if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
@@ -450,16 +468,27 @@ impl TreeNode {
                 return true;
             }
         } else if let Null = &child_borrow.value {
+            println!("awa?");
             let mut ret = false;
-            child_borrow.children.iter().for_each(|child| {
-                if self.handle_potential_conflict_internal(child) {
+            self.do_stuff_cycle_aware(&mut |_, child| {
+                if self.handle_potential_conflict_internal(&child) {
                     let mut mut_child = child.borrow_mut();
                     if let Keyword(k) = &mut mut_child.value {
                         k.short = NameShortener::expand(Some(&k.short), &k.expanded);
                     }
                     ret = true;
                 }
+                false
             });
+            // child_borrow.children.iter().for_each(|child| {
+            //     if self.handle_potential_conflict_internal(child) {
+            //         let mut mut_child = child.borrow_mut();
+            //         if let Keyword(k) = &mut mut_child.value {
+            //             k.short = NameShortener::expand(Some(&k.short), &k.expanded);
+            //         }
+            //         ret = true;
+            //     }
+            // });
             if ret {
                 return true;
             }
@@ -831,5 +860,21 @@ mod tests {
         let mut cursor = TreeCursor::new(&root);
         assert!(cursor.advance('u').is_some());
         assert!(cursor.advance('s').is_some());
+    }
+
+    #[test]
+    fn test_deep_clone() {
+        let root = TreeNode::new_null(None);
+        let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
+        let child = TreeNode::new(sign_token.clone(), &root);
+        sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
+
+        let child2 = TreeNode::new(sign_token, &root);
+        let types = TreeNode::new_required(NodeType::Null, &child);
+        println!("hi?");
+        TreeNode::add_child_cycle_safe(&types, &root);
+        root.borrow().dbg();
+        root.borrow().deep_clone().dbg();
+        assert!(false);
     }
 }
