@@ -13,14 +13,19 @@ pub fn print_parsed_ebnf(syntax: &str) {
     }
 }
 
+enum TerminalState {
+    Stub,
+    Created,
+}
+
 fn handle_node(
     grammar: &Grammar,
     cur_node: &Node,
     cur_root: &Rc<RefCell<TreeNode>>,
-    terminals: &mut HashMap<String, Rc<RefCell<TreeNode>>>,
+    terminals: &mut HashMap<String, (Rc<RefCell<TreeNode>>, TerminalState)>,
 ) -> Rc<RefCell<TreeNode>> {
     debug_println!("handle_node got {:?}", cur_node);
-    match &cur_node {
+    let ret = match &cur_node {
         Node::String(str) => {
             TreeNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root))
         }
@@ -34,7 +39,11 @@ fn handle_node(
                 // let term_clone = Rc::new(RefCell::new(
                 //     terminals.get(name).unwrap().borrow().deep_clone(),
                 // ));
-                let term_clone = terminals.get(name).unwrap().clone();
+                let term = terminals.get(name).unwrap();
+                let term_clone = match term.1 {
+                    TerminalState::Stub => term.0.clone(),
+                    TerminalState::Created => term.0.borrow().deep_clone(),
+                };
                 println!("cur_root:");
                 cur_root.borrow().dbg();
                 println!("term:");
@@ -44,17 +53,29 @@ fn handle_node(
                 cur_root.borrow().dbg();
                 term_clone
             } else {
+                println!("Creating terminal {name}...");
                 let terminal = find_terminal(&grammar, &name);
                 if terminal.is_none() {
                     panic!("Terminal reference '{name}' not found!");
                 }
                 let terminal = terminal.unwrap();
-                let term_root = TreeNode::new_null(Some(cur_root));
-                terminals.insert(name.to_string(), Rc::clone(&term_root));
+                let term_root = TreeNode::new_null(None);
+                terminals.insert(
+                    name.to_string(),
+                    (Rc::clone(&term_root), TerminalState::Stub),
+                );
+                debug_println!("Creating terminal...");
                 handle_node(grammar, &terminal.rhs, &term_root, terminals);
+                terminals.insert(
+                    name.to_string(),
+                    (Rc::clone(&term_root), TerminalState::Created),
+                );
+                debug_println!("Finish terminal");
                 println!("young {}:", name);
                 term_root.borrow().dbg();
-                term_root.borrow().deep_clone()
+                let ret = term_root.borrow().deep_clone();
+                TreeNode::add_child_cycle_safe(cur_root, &ret);
+                ret
             }
         }
         Node::Multiple(nodes) => {
@@ -62,7 +83,7 @@ fn handle_node(
             // TODO: this doesn't handle multiple Optionals in a row!!! Make this a Vec instead
             let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
             nodes.iter().for_each(|node| {
-                debug_println!("{node:?}");
+                debug_println!("Multiple at {node:?}");
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
                 if let Some(last_opt) = &last_opt {
                     TreeNode::add_child_to_all_leaves(&last_opt, &tree_bit);
@@ -115,7 +136,10 @@ fn handle_node(
             println!("Unimplemented: {cur_node:?}");
             todo!()
         }
-    }
+    };
+    println!("cur_root:");
+    cur_root.borrow().dbg();
+    ret
 }
 
 fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expression> {
@@ -127,13 +151,18 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, Strin
         Ok(grammar) => {
             let root = TreeNode::new_null(None);
             let root_node = grammar.expressions.get(0).expect("Empty BNF!");
-            let mut terminals: HashMap<String, Rc<RefCell<TreeNode>>> = HashMap::new();
-            handle_node(&grammar, &root_node.rhs, &root, &mut terminals);
+            let mut terminals = HashMap::new();
+            handle_node(
+                &grammar,
+                &Node::Terminal(root_node.lhs.to_owned()),
+                &root,
+                &mut terminals,
+            );
             // sanity op, is_done() won't cancel preemptively
             TreeNode::add_child_to_all_leaves(&root, &TreeNode::new_null(None));
             for (name, term) in terminals.iter() {
                 println!("Term {}", name);
-                term.borrow().dbg();
+                term.0.borrow().dbg();
             }
             Ok(root)
         }
