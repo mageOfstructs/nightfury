@@ -153,7 +153,7 @@ impl TreeNode {
         for child in &old.children {
             if !visited_nodes.contains_key(&child.borrow().id) {
                 let clone = Rc::new(RefCell::new(Self {
-                    id: child.borrow().id,
+                    id: Uuid::new_v4(),
                     value: child.borrow().value.clone(),
                     parent: None, // is deprecated anyways
                     children: Vec::new(),
@@ -173,13 +173,14 @@ impl TreeNode {
     pub fn deep_clone(&self) -> Rc<RefCell<Self>> {
         debug_println!("Deep cloning node {}", self.short_id());
         let ret = Rc::new(RefCell::new(Self {
-            id: self.id,
+            id: Uuid::new_v4(),
             value: self.value.clone(),
             parent: None, // is deprecated anyways
             children: Vec::new(),
         }));
         let ret = TreeNode::deep_clone_internal(&ret, self, &mut HashMap::new());
-        debug_println!("Finish deep clone");
+        debug_println!("Finish deep clone:");
+        ret.borrow().dbg();
         ret
     }
     fn do_stuff_cycle_aware(
@@ -468,7 +469,7 @@ impl TreeNode {
                 return true;
             }
         } else if let Null = &child_borrow.value {
-            println!("awa?");
+            // println!("awa?");
             let mut ret = false;
             self.do_stuff_cycle_aware(&mut |_, child| {
                 if self.handle_potential_conflict_internal(&child) {
