@@ -178,7 +178,9 @@ impl TreeNode {
             parent: None, // is deprecated anyways
             children: Vec::new(),
         }));
-        let ret = TreeNode::deep_clone_internal(&ret, self, &mut HashMap::new());
+        let mut visited_nodes = HashMap::new();
+        visited_nodes.insert(self.id, ret.clone());
+        let ret = TreeNode::deep_clone_internal(&ret, self, &mut visited_nodes);
         debug_println!("Finish deep clone:");
         ret.borrow().dbg();
         ret
