@@ -558,46 +558,22 @@ impl TreeCursor {
                 UserDefined { .. } | UserDefinedRegex { .. } => true,
                 _ => false,
             })
-        // for child in &treenode.borrow().children {
-        //     match child.borrow().value {
-        //         UserDefined { .. } | UserDefinedRegex { .. } => return Some(child.clone()),
-        //         Null => {
-        //             let rec_res = self.search_for_userdefs(&child);
-        //             if rec_res.is_some() {
-        //                 return rec_res;
-        //             }
-        //         }
-        //         _ => {}
-        //     }
-        // }
-        // None
     }
-    pub fn search_rec(
-        &self,
-        treenode: &Rc<RefCell<TreeNode>>,
-        potential_matches: &mut u32,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
-        self.search_rec_internal(treenode, potential_matches, false)
+    pub fn search_rec(&self, treenode: &Rc<RefCell<TreeNode>>) -> Option<Rc<RefCell<TreeNode>>> {
+        self.search_rec_internal(treenode, false)
     }
     pub fn search_rec_internal(
         &self,
         treenode: &Rc<RefCell<TreeNode>>,
-        potential_matches: &mut u32,
         best_effort: bool,
     ) -> Option<Rc<RefCell<TreeNode>>> {
-        // if *potential_matches > 1 {
-        //     return None; // don't even try
-        // }
-        // println!("search_rec: {:?}", treenode.borrow().value);
-        // println!("{}\n", self.input_buf);
         debug_println!(
             "search_rec at {:?} {}",
             treenode.borrow().value,
             treenode.borrow().short_id()
         );
-        let binding = treenode;
-        let borrow = binding.borrow();
         let mut keyword_match = None;
+        let mut potential_matches = 0;
         let mut visited_keywords = 0;
         let mut last_keyword = None;
         treenode
@@ -615,74 +591,25 @@ impl TreeCursor {
                             debug_println!("{:?}", child.borrow().value);
                             debug_println!("{short} == {}", self.input_buf);
                             keyword_match = Some(child.clone());
-                            *potential_matches += 1;
-                            *potential_matches > 1
+                            potential_matches += 1;
+                            potential_matches > 1
                         } else {
                             false
                         }
                     }
-                    // Null => {
-                    //     debug_println!("RecParent: {:?}", child.borrow().value);
-                    //     let rec_res = self.search_rec(&child, potential_matches);
-                    //     if rec_res.is_some() {
-                    //         debug_println!(
-                    //             "Recursive: {:?}",
-                    //             rec_res.as_ref().unwrap().borrow().value
-                    //         );
-                    //         // *potential_matches += 1;
-                    //         keyword_match = rec_res;
-                    //         false
-                    //     }
-                    // }
                     _ => false,
                 }
             });
-        // for child in &borrow.children {
-        //     let node_val = &child.borrow().value;
-        //     match node_val {
-        //         NodeType::Keyword(Keyword { short, .. }) if short.starts_with(&self.input_buf) => {
-        //             debug_println!("{:?}", child.borrow().value);
-        //             debug_println!("{short} == {}", self.input_buf);
-        //             keyword_match = Some(child.clone());
-        //             *potential_matches += 1;
-        //             if *potential_matches > 1 {
-        //                 break;
-        //             }
-        //         }
-        //         Null => {
-        //             debug_println!("RecParent: {:?}", child.borrow().value);
-        //             let rec_res = self.search_rec(&child, potential_matches);
-        //             if rec_res.is_some() {
-        //                 debug_println!("Recursive: {:?}", rec_res.as_ref().unwrap().borrow().value);
-        //                 // *potential_matches += 1;
-        //                 keyword_match = rec_res;
-        //                 if *potential_matches > 1 {
-        //                     break;
-        //                 }
-        //             }
-        //         }
-        //         _ => {}
-        //     }
-        // }
         debug_println!("pm: {potential_matches}");
-        if keyword_match.is_some() && *potential_matches == 1 {
+        if keyword_match.is_some() && potential_matches == 1 {
             return keyword_match;
         }
-        // debug_println!("lk: {last_keyword:?}");
+
         if visited_keywords == 1 && best_effort {
             // probably what the user wants
             return last_keyword;
         }
 
-        // so we can start typing right away
-        //
-        // let userdef_match = borrow
-        //     .children
-        //     .iter()
-        //     .find(|child| match child.borrow().value {
-        //         UserDefined { .. } | UserDefinedRegex(..) => true,
-        //         _ => false,
-        //     });
         let userdef_match = self.search_for_userdefs(treenode);
         if userdef_match.is_some() {
             return userdef_match;
@@ -711,7 +638,7 @@ impl TreeCursor {
                     let strong_ref = self.get_cur_ast_binding();
                     self.input_buf.clear();
                     self.input_buf.push(input);
-                    let mut next_node = self.search_rec(&strong_ref, &mut 0);
+                    let mut next_node = self.search_rec(&strong_ref);
                     let borrow = strong_ref.borrow();
                     if next_node.is_none() {
                         next_node =
@@ -732,9 +659,7 @@ impl TreeCursor {
                             Some(expanded.clone())
                         } else {
                             // FIXME: this is terrible logic
-                            if let Some(next_node) =
-                                self.search_rec_internal(&next_node, &mut 0, true)
-                            {
+                            if let Some(next_node) = self.search_rec_internal(&next_node, true) {
                                 self.update_cursor(&next_node);
                                 if let Keyword(Keyword {
                                     expanded,
@@ -759,7 +684,7 @@ impl TreeCursor {
                 }
             }
             _ => {
-                let res = self.search_rec(&binding, &mut 0);
+                let res = self.search_rec(&binding);
                 if let Some(node) = res {
                     self.update_cursor(&node);
                     return match &node.borrow().value {
