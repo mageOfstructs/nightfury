@@ -9,10 +9,10 @@ use regex::Regex;
 fn main() {
     let sql = r"
         query ::= select | insert;
-        select ::= 'SELECT' collist 'FROM' #'^.*;$';
+        select ::= 'SELECT' '*' | collist 'FROM' #'^.*;$';
         insert ::= 'INSERT INTO' #'^.* $' 'VALUES' '(' collist ')';
         collist ::= col ( ',' collist )?;
-        col ::= #'^.*[, ]$' | '*';
+        col ::= #'^.*[, ]$';
     ";
     // Repeat nodes:
     // identifier ::= letter { letter | digit | "_" };
