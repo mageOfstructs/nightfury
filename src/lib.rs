@@ -699,11 +699,14 @@ impl TreeCursor {
                     }
                     let next_node = next_node.unwrap();
                     self.update_cursor(&next_node);
+                    // TODO: this is a weak attempt at solving this
                     let ret = if let NodeType::Keyword(Keyword {
+                        short,
                         expanded,
                         closing_token: None,
                         ..
                     }) = &next_node.borrow().value
+                        && short.starts_with(input)
                     {
                         Some(expanded.clone())
                     } else {
