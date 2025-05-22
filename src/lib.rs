@@ -577,6 +577,14 @@ impl TreeCursor {
         treenode: &Rc<RefCell<TreeNode>>,
         potential_matches: &mut u32,
     ) -> Option<Rc<RefCell<TreeNode>>> {
+        self.search_rec_internal(treenode, potential_matches, false)
+    }
+    pub fn search_rec_internal(
+        &self,
+        treenode: &Rc<RefCell<TreeNode>>,
+        potential_matches: &mut u32,
+        best_effort: bool,
+    ) -> Option<Rc<RefCell<TreeNode>>> {
         // if *potential_matches > 1 {
         //     return None; // don't even try
         // }
@@ -590,19 +598,28 @@ impl TreeCursor {
         let binding = treenode;
         let borrow = binding.borrow();
         let mut keyword_match = None;
+        let mut visited_keywords = 0;
+        let mut last_keyword = None;
         treenode
             .borrow()
             .do_stuff_cycle_aware_non_greedy(&mut |child| {
                 let node_val = &child.borrow().value;
                 match node_val {
-                    NodeType::Keyword(Keyword { short, .. })
-                        if short.starts_with(&self.input_buf) =>
-                    {
-                        debug_println!("{:?}", child.borrow().value);
-                        debug_println!("{short} == {}", self.input_buf);
-                        keyword_match = Some(child.clone());
-                        *potential_matches += 1;
-                        *potential_matches > 1
+                    NodeType::Keyword(Keyword { short, .. }) => {
+                        // bandaid logic
+                        visited_keywords += 1;
+                        if visited_keywords == 1 {
+                            last_keyword = Some(child.clone());
+                        }
+                        if short.starts_with(&self.input_buf) {
+                            debug_println!("{:?}", child.borrow().value);
+                            debug_println!("{short} == {}", self.input_buf);
+                            keyword_match = Some(child.clone());
+                            *potential_matches += 1;
+                            *potential_matches > 1
+                        } else {
+                            false
+                        }
                     }
                     // Null => {
                     //     debug_println!("RecParent: {:?}", child.borrow().value);
@@ -650,6 +667,11 @@ impl TreeCursor {
         debug_println!("pm: {potential_matches}");
         if keyword_match.is_some() && *potential_matches == 1 {
             return keyword_match;
+        }
+        // debug_println!("lk: {last_keyword:?}");
+        if visited_keywords == 1 && best_effort {
+            // probably what the user wants
+            return last_keyword;
         }
 
         // so we can start typing right away
@@ -699,16 +721,36 @@ impl TreeCursor {
                     }
                     let next_node = next_node.unwrap();
                     self.update_cursor(&next_node);
-                    // TODO: this is a weak attempt at solving this
                     let ret = if let NodeType::Keyword(Keyword {
                         short,
                         expanded,
                         closing_token: None,
                         ..
                     }) = &next_node.borrow().value
-                        && short.starts_with(input)
                     {
-                        Some(expanded.clone())
+                        if short.starts_with(input) {
+                            Some(expanded.clone())
+                        } else {
+                            // FIXME: this is terrible logic
+                            if let Some(next_node) =
+                                self.search_rec_internal(&next_node, &mut 0, true)
+                            {
+                                self.update_cursor(&next_node);
+                                if let Keyword(Keyword {
+                                    expanded,
+                                    closing_token: None,
+                                    ..
+                                }) = &next_node.borrow().value
+                                // && short.starts_with(input)
+                                {
+                                    Some(expanded.clone())
+                                } else {
+                                    Some(input.to_string())
+                                }
+                            } else {
+                                Some(input.to_string())
+                            }
+                        }
                     } else {
                         Some(input.to_string())
                     };
