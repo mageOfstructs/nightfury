@@ -41,10 +41,11 @@ fn handle_node(
                     TerminalState::Stub => term.0.clone(),
                     TerminalState::Created => term.0.borrow().deep_clone(),
                 };
-                println!("cur_root:");
-                cur_root.borrow().dbg();
-                println!("term:");
-                term_clone.borrow().dbg();
+                println!("linking back to {}", term_clone.borrow().short_id());
+                // println!("cur_root:");
+                // cur_root.borrow().dbg();
+                // println!("term:");
+                // term_clone.borrow().dbg();
                 TreeNode::add_child_cycle_safe(cur_root, &term_clone);
                 println!("after add:");
                 cur_root.borrow().dbg();
@@ -57,6 +58,7 @@ fn handle_node(
                 }
                 let terminal = terminal.unwrap();
                 let term_root = TreeNode::new_null(None);
+                debug_println!("term_root: {}", term_root.borrow().short_id());
                 terminals.insert(
                     name.to_string(),
                     (Rc::clone(&term_root), TerminalState::Stub),
@@ -80,6 +82,7 @@ fn handle_node(
             let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
             nodes.iter().for_each(|node| {
                 debug_println!("Multiple at {node:?}");
+                // FIXME: if node is a terminal with an optional at the end, this won't catch that
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
                 debug_println!("Multiple got back:");
                 tree_bit.borrow().dbg();
@@ -102,10 +105,9 @@ fn handle_node(
             });
             cur_treenode
         }
-        Node::RegexExt(node, RegexExtKind::Optional) => {
+        Node::RegexExt(node, RegexExtKind::Optional) | Node::Optional(node) => {
             handle_node(grammar, &node, cur_root, terminals)
         }
-        Node::Optional(node) => handle_node(grammar, &node, cur_root, terminals),
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
             let t1 = handle_node(grammar, &n1.to_owned(), &cur_root, terminals);
             let t2 = handle_node(grammar, &n2.to_owned(), &t1, terminals);
@@ -132,8 +134,8 @@ fn handle_node(
             todo!()
         }
     };
-    println!("cur_root:");
-    cur_root.borrow().dbg();
+    // println!("cur_root:");
+    // cur_root.borrow().dbg();
     ret
 }
 
