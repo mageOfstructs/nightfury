@@ -122,7 +122,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeValue {
     pub ntype: NodeType,
-    pub optional: bool,
+    pub is_done: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -577,6 +577,11 @@ impl TreeCursor {
             .borrow()
             .do_stuff_cycle_aware_non_greedy(&mut |child| {
                 let node_val = &child.borrow().value;
+                debug_println!(
+                    "search_rec closure at {:?} {}",
+                    child.borrow().value,
+                    child.borrow().short_id()
+                );
                 match node_val {
                     NodeType::Keyword(Keyword { short, .. }) => {
                         // bandaid logic
@@ -602,6 +607,7 @@ impl TreeCursor {
             return keyword_match;
         }
 
+        debug_println!("vk: {visited_keywords}");
         if visited_keywords == 1 && best_effort {
             // probably what the user wants
             return last_keyword;
@@ -614,7 +620,7 @@ impl TreeCursor {
         None
     }
     pub fn advance(&mut self, input: char) -> Option<String> {
-        let binding = self.cur_ast_pos.upgrade().expect("Tree failure");
+        let binding = self.get_cur_ast_binding();
         let borrow = binding.borrow();
         debug_println!(
             "advance with cursor {:?} {}",
@@ -632,12 +638,11 @@ impl TreeCursor {
             NodeType::UserDefinedRegex(r) => {
                 debug_println!("Checking regex against '{}'", &self.input_buf);
                 if r.is_match(&self.input_buf) {
-                    // let strong_ref = self.get_cur_ast_binding();
                     self.input_buf.clear();
                     self.input_buf.push(input);
-                    let mut next_node = self.search_rec(&binding);
-                    // let borrow = strong_ref.borrow();
+                    let mut next_node = self.search_rec_internal(&binding, true);
                     if next_node.is_none() {
+                        println!("No node found");
                         next_node =
                             Some(Rc::clone(&borrow.children.get(0).expect(
                                 "UserDefinedRegex doesn't have a child and is therefore sad",
