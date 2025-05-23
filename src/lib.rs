@@ -632,11 +632,11 @@ impl TreeCursor {
             NodeType::UserDefinedRegex(r) => {
                 debug_println!("Checking regex against '{}'", &self.input_buf);
                 if r.is_match(&self.input_buf) {
-                    let strong_ref = self.get_cur_ast_binding();
+                    // let strong_ref = self.get_cur_ast_binding();
                     self.input_buf.clear();
                     self.input_buf.push(input);
-                    let mut next_node = self.search_rec(&strong_ref);
-                    let borrow = strong_ref.borrow();
+                    let mut next_node = self.search_rec(&binding);
+                    // let borrow = strong_ref.borrow();
                     if next_node.is_none() {
                         next_node =
                             Some(Rc::clone(&borrow.children.get(0).expect(
@@ -912,5 +912,26 @@ mod tests {
         assert_eq!("s", cursor.advance('s').unwrap());
         assert_eq!("t", cursor.advance('t').unwrap());
         assert!(cursor.is_done());
+    }
+
+    // you are the bane of my existence. If I ever had the chance to erase
+    // something from the universe permanently, I would erase recursive bnf terminal definitions.
+    // There is no reason this is so incredibly hard to parse.
+    #[test]
+    fn test_sql() {
+        let bnf = r"
+        query ::= select | insert;
+        select ::= 'SELECT' '*' | collist 'FROM' #'^.*;$';
+        insert ::= 'INSERT INTO' #'^.* $' 'VALUES' '(' collist ')';
+        collist ::= col ( ',' collist )?;
+        col ::= #'^.*[, ]$';
+    ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!("SELECT", cursor.advance('S').unwrap());
+        assert_eq!(None, cursor.advance('a'));
+        assert_eq!(",", cursor.advance(',').unwrap());
+        assert_eq!(None, cursor.advance('b'));
+        assert_eq!("FROM", cursor.advance(' ').unwrap());
     }
 }
