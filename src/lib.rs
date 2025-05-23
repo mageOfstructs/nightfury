@@ -257,6 +257,8 @@ impl TreeNode {
         self.children.push(Rc::clone(&child));
     }
     pub fn add_child_cycle_safe(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
+        // println!("accs child:");
+        // child.borrow().dbg();
         while this.borrow().handle_potential_conflict(child) {}
         this.borrow_mut().children.push(Rc::clone(&child));
     }
@@ -473,25 +475,20 @@ impl TreeNode {
         } else if let Null = &child_borrow.value {
             // println!("awa?");
             let mut ret = false;
-            self.do_stuff_cycle_aware(&mut |_, child| {
-                if self.handle_potential_conflict_internal(&child) {
-                    let mut mut_child = child.borrow_mut();
-                    if let Keyword(k) = &mut mut_child.value {
-                        k.short = NameShortener::expand(Some(&k.short), &k.expanded);
+            let mut visited_nodes = HashSet::new();
+            // iterate over every child and return true if at least one had a conflict
+            for child in &child_borrow.children {
+                if !visited_nodes.contains(&child.borrow().id) {
+                    visited_nodes.insert(child.borrow().id);
+                    if self.handle_potential_conflict_internal(&child) {
+                        let mut mut_child = child.borrow_mut();
+                        if let Keyword(k) = &mut mut_child.value {
+                            k.short = NameShortener::expand(Some(&k.short), &k.expanded);
+                        }
+                        ret = true;
                     }
-                    ret = true;
                 }
-                false
-            });
-            // child_borrow.children.iter().for_each(|child| {
-            //     if self.handle_potential_conflict_internal(child) {
-            //         let mut mut_child = child.borrow_mut();
-            //         if let Keyword(k) = &mut mut_child.value {
-            //             k.short = NameShortener::expand(Some(&k.short), &k.expanded);
-            //         }
-            //         ret = true;
-            //     }
-            // });
+            }
             if ret {
                 return true;
             }
