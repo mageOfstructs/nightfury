@@ -51,7 +51,7 @@ column_name ::= identifier;
 table_name ::= identifier;
 object_name ::= identifier;
 alias ::= "AS" identifier;
-identifier ::= #'[A-Za-z][0-9A-Za-z_]*';
+identifier ::= #'[A-Za-z][0-9A-Za-z_]* ';
 comparison_operator ::= "=" | "!=" | "<" | ">" | "<=" | ">=";
 logical_operator ::= "AND" | "OR" | "NOT";
 letter ::= #'[A-Za-z]';
