@@ -29,7 +29,7 @@ fn main() {
     if let Ok(root) = frontend::create_graph_from_ebnf(&sql) {
         println!("FSM:");
         root.borrow().dbg();
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
 
         let terminal = Term::stdout();
         while !cursor.is_done() {
@@ -51,19 +51,19 @@ fn main() {
         eprintln!("Error while creating graph");
     }
     return;
-    let root = TreeNode::new_null(None);
+    let root = FSMNode::new_null(None);
     let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
-    let child = TreeNode::new(sign_token.clone(), &root);
+    let child = FSMNode::new(sign_token.clone(), &root);
     sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
 
-    let signed = TreeNode::new(sign_token, &root);
-    let types = TreeNode::new_required(NodeType::Null, &child);
+    let signed = FSMNode::new(sign_token, &root);
+    let types = FSMNode::new_required(NodeType::Null, &child);
 
-    let int = TreeNode::new_keyword_with_parent("int".to_string(), types.clone());
-    let short = TreeNode::new_keyword_with_parent("short".to_string(), types.clone());
-    let short2 = TreeNode::new_keyword_with_parent("shark".to_string(), types.clone());
+    let int = FSMNode::new_keyword_with_parent("int".to_string(), types.clone());
+    let short = FSMNode::new_keyword_with_parent("short".to_string(), types.clone());
+    let short2 = FSMNode::new_keyword_with_parent("shark".to_string(), types.clone());
 
-    let userdefined_node = TreeNode::new_required(
+    let userdefined_node = FSMNode::new_required(
         NodeType::UserDefinedRegex(Regex::new("[0-9]{3,3}").unwrap()),
         &int,
     );
@@ -73,24 +73,24 @@ fn main() {
     //     },
     //     &int,
     // );
-    let null = TreeNode::new_required(NodeType::Null, &userdefined_node);
+    let null = FSMNode::new_required(NodeType::Null, &userdefined_node);
     short.borrow_mut().add_child(&userdefined_node);
 
     signed.borrow_mut().add_child(&types);
     root.borrow_mut().add_child(&types);
 
-    let expression = TreeNode::new(
+    let expression = FSMNode::new(
         NodeType::Keyword(Keyword::new("(".to_string(), Some(")".to_string()))),
         &root,
     );
-    let expr_boolvar = TreeNode::new(
+    let expr_boolvar = FSMNode::new(
         NodeType::UserDefined {
             final_chars: vec![')', '&', '('],
         },
         &expression,
     );
     expr_boolvar.borrow_mut().add_child(&null.clone());
-    let cond_and = TreeNode::new(
+    let cond_and = FSMNode::new(
         NodeType::Keyword(Keyword::new("&&".to_string(), None)),
         &expression,
     );
@@ -101,7 +101,7 @@ fn main() {
     println!("Dump:");
     int.borrow().dump_children();
     // root.borrow().dbg();
-    let mut cursor = TreeCursor::new(&root);
+    let mut cursor = FSMCursor::new(&root);
 
     let terminal = Term::stdout();
     while !cursor.is_done() {

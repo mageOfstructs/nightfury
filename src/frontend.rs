@@ -4,7 +4,7 @@ use debug_print::debug_println;
 use ebnf::{Expression, Grammar, Node, RegexExtKind, SymbolKind};
 use regex::Regex;
 
-use crate::TreeNode;
+use crate::FSMNode;
 
 pub fn print_parsed_ebnf(syntax: &str) {
     let grammar = ebnf::get_grammar(&syntax).unwrap();
@@ -21,15 +21,13 @@ enum TerminalState {
 fn handle_node(
     grammar: &Grammar,
     cur_node: &Node,
-    cur_root: &Rc<RefCell<TreeNode>>,
-    terminals: &mut HashMap<String, (Rc<RefCell<TreeNode>>, TerminalState)>,
-) -> Rc<RefCell<TreeNode>> {
+    cur_root: &Rc<RefCell<FSMNode>>,
+    terminals: &mut HashMap<String, (Rc<RefCell<FSMNode>>, TerminalState)>,
+) -> Rc<RefCell<FSMNode>> {
     debug_println!("handle_node got {:?}", cur_node);
     let ret = match &cur_node {
-        Node::String(str) => {
-            TreeNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root))
-        }
-        Node::RegexString(r) => TreeNode::new(
+        Node::String(str) => FSMNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root)),
+        Node::RegexString(r) => FSMNode::new(
             crate::NodeType::UserDefinedRegex(Regex::new(r).unwrap()),
             &cur_root,
         ),
@@ -46,7 +44,7 @@ fn handle_node(
                 // cur_root.borrow().dbg();
                 // println!("term:");
                 // term_clone.borrow().dbg();
-                TreeNode::add_child_cycle_safe(cur_root, &term_clone);
+                FSMNode::add_child_cycle_safe(cur_root, &term_clone);
                 println!("after add:");
                 cur_root.borrow().dbg();
                 term_clone
@@ -57,7 +55,7 @@ fn handle_node(
                     panic!("Terminal reference '{name}' not found!");
                 }
                 let terminal = terminal.unwrap();
-                let term_root = TreeNode::new_null(None);
+                let term_root = FSMNode::new_null(None);
                 debug_println!("term_root: {}", term_root.borrow().short_id());
                 terminals.insert(
                     name.to_string(),
@@ -72,14 +70,14 @@ fn handle_node(
                 debug_println!("young {}:", name);
                 term_root.borrow().dbg();
                 let ret = term_root.borrow().deep_clone();
-                TreeNode::add_child_cycle_safe(cur_root, &ret);
+                FSMNode::add_child_cycle_safe(cur_root, &ret);
                 ret
             }
         }
         Node::Multiple(nodes) => {
             let mut cur_treenode = cur_root.clone();
             // TODO: this doesn't handle multiple Optionals in a row!!! Make this a Vec instead
-            let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
+            let mut last_opt: Option<Rc<RefCell<FSMNode>>> = None;
             nodes.iter().for_each(|node| {
                 debug_println!("Multiple at {node:?}");
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
@@ -110,9 +108,9 @@ fn handle_node(
         }
         Node::RegexExt(node, RegexExtKind::Optional) | Node::Optional(node) => {
             let tree_bit = handle_node(grammar, &node, cur_root, terminals);
-            let dummy = TreeNode::new_null(None);
-            TreeNode::add_child_to_all_leaves(&tree_bit, &dummy);
-            TreeNode::add_child_cycle_safe(&cur_root, &dummy);
+            let dummy = FSMNode::new_null(None);
+            FSMNode::add_child_to_all_leaves(&tree_bit, &dummy);
+            FSMNode::add_child_cycle_safe(&cur_root, &dummy);
             tree_bit
         }
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
@@ -121,23 +119,23 @@ fn handle_node(
             t1
         }
         Node::Symbol(n1, SymbolKind::Alternation, n2) => {
-            let root = TreeNode::new_null(Some(cur_root));
+            let root = FSMNode::new_null(Some(cur_root));
             let t1 = handle_node(grammar, &n1.to_owned(), &root, terminals);
             let t2 = handle_node(grammar, &n2.to_owned(), &root, terminals);
-            let child = TreeNode::new_null(None);
-            TreeNode::add_child_to_all_leaves(&t1, &child);
-            TreeNode::add_child_to_all_leaves(&t2, &child);
+            let child = FSMNode::new_null(None);
+            FSMNode::add_child_to_all_leaves(&t1, &child);
+            FSMNode::add_child_to_all_leaves(&t2, &child);
             root
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
         Node::Repeat(node) => {
             let subroot = handle_node(grammar, &node, cur_root, terminals);
 
-            let dummy = TreeNode::new_null(None);
-            TreeNode::add_child_to_all_leaves(&subroot, &dummy);
-            TreeNode::add_child_cycle_safe(&cur_root, &dummy);
+            let dummy = FSMNode::new_null(None);
+            FSMNode::add_child_to_all_leaves(&subroot, &dummy);
+            FSMNode::add_child_cycle_safe(&cur_root, &dummy);
 
-            TreeNode::add_child_cycle_safe(&subroot, &subroot);
+            FSMNode::add_child_cycle_safe(&subroot, &subroot);
             subroot
         }
         _ => {
@@ -154,10 +152,10 @@ fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expressi
     grammer.expressions.iter().find(|expr| expr.lhs == name)
 }
 
-pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, String> {
+pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<FSMNode>>, String> {
     match ebnf::get_grammar(ebnf) {
         Ok(grammar) => {
-            let root = TreeNode::new_null(None);
+            let root = FSMNode::new_null(None);
             let root_node = grammar.expressions.get(0).expect("Empty BNF!");
             let mut terminals = HashMap::new();
             handle_node(
@@ -167,7 +165,7 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, Strin
                 &mut terminals,
             );
             // sanity op, is_done() won't cancel preemptively
-            TreeNode::add_child_to_all_leaves(&root, &TreeNode::new_null(None));
+            FSMNode::add_child_to_all_leaves(&root, &FSMNode::new_null(None));
             for (name, term) in terminals.iter() {
                 println!("Term {}", name);
                 term.0.borrow().dbg();

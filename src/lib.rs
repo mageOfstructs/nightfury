@@ -126,15 +126,15 @@ pub struct NodeValue {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TreeNode {
+pub struct FSMNode {
     id: Uuid,
     is_done: bool,
     value: NodeType,
-    parent: Option<Rc<RefCell<TreeNode>>>,
-    children: Vec<Rc<RefCell<TreeNode>>>,
+    parent: Option<Rc<RefCell<FSMNode>>>,
+    children: Vec<Rc<RefCell<FSMNode>>>,
 }
 
-impl Default for TreeNode {
+impl Default for FSMNode {
     fn default() -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -146,11 +146,11 @@ impl Default for TreeNode {
     }
 }
 
-impl TreeNode {
+impl FSMNode {
     fn deep_clone_internal(
         stub: &Rc<RefCell<Self>>,
-        old: &TreeNode,
-        visited_nodes: &mut HashMap<Uuid, Rc<RefCell<TreeNode>>>,
+        old: &FSMNode,
+        visited_nodes: &mut HashMap<Uuid, Rc<RefCell<FSMNode>>>,
     ) -> Rc<RefCell<Self>> {
         for child in &old.children {
             if !visited_nodes.contains_key(&child.borrow().id) {
@@ -159,7 +159,7 @@ impl TreeNode {
                     ..Default::default()
                 }));
                 visited_nodes.insert(child.borrow().id, clone.clone());
-                TreeNode::deep_clone_internal(&clone, &child.borrow(), visited_nodes);
+                FSMNode::deep_clone_internal(&clone, &child.borrow(), visited_nodes);
                 stub.borrow_mut().children.push(clone);
             } else {
                 stub.borrow_mut()
@@ -178,22 +178,22 @@ impl TreeNode {
         }));
         let mut visited_nodes = HashMap::new();
         visited_nodes.insert(self.id, ret.clone());
-        let ret = TreeNode::deep_clone_internal(&ret, self, &mut visited_nodes);
+        let ret = FSMNode::deep_clone_internal(&ret, self, &mut visited_nodes);
         debug_println!("Finish deep clone:");
         ret.borrow().dbg();
         ret
     }
     fn do_stuff_cycle_aware(
         &self,
-        op: &mut impl FnMut(&TreeNode, Rc<RefCell<TreeNode>>) -> bool,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
+        op: &mut impl FnMut(&FSMNode, Rc<RefCell<FSMNode>>) -> bool,
+    ) -> Option<Rc<RefCell<FSMNode>>> {
         self.do_stuff_cycle_aware_internal(op, &mut HashSet::new())
     }
     fn do_stuff_cycle_aware_internal(
         &self,
-        op: &mut impl FnMut(&TreeNode, Rc<RefCell<TreeNode>>) -> bool,
+        op: &mut impl FnMut(&FSMNode, Rc<RefCell<FSMNode>>) -> bool,
         visited_nodes: &mut HashSet<Uuid>,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
+    ) -> Option<Rc<RefCell<FSMNode>>> {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
@@ -213,15 +213,15 @@ impl TreeNode {
 
     fn do_stuff_cycle_aware_non_greedy(
         &self,
-        op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
+        op: &mut impl FnMut(Rc<RefCell<FSMNode>>) -> bool,
+    ) -> Option<Rc<RefCell<FSMNode>>> {
         self.do_stuff_cycle_aware_non_greedy_internal(op, &mut HashSet::new())
     }
     fn do_stuff_cycle_aware_non_greedy_internal(
         &self,
-        op: &mut impl FnMut(Rc<RefCell<TreeNode>>) -> bool,
+        op: &mut impl FnMut(Rc<RefCell<FSMNode>>) -> bool,
         visited_nodes: &mut HashSet<Uuid>,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
+    ) -> Option<Rc<RefCell<FSMNode>>> {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
@@ -247,20 +247,20 @@ impl TreeNode {
         .is_some()
     }
 
-    pub fn get_last_child(&self) -> Option<Rc<RefCell<TreeNode>>> {
+    pub fn get_last_child(&self) -> Option<Rc<RefCell<FSMNode>>> {
         self.children.last().cloned()
     }
-    pub fn add_child(&mut self, child: &Rc<RefCell<TreeNode>>) {
+    pub fn add_child(&mut self, child: &Rc<RefCell<FSMNode>>) {
         while self.handle_potential_conflict(child) {}
         self.children.push(Rc::clone(&child));
     }
-    pub fn add_child_cycle_safe(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
+    pub fn add_child_cycle_safe(this: &Rc<RefCell<FSMNode>>, child: &Rc<RefCell<FSMNode>>) {
         // println!("accs child:");
         // child.borrow().dbg();
         while this.borrow().handle_potential_conflict(child) {}
         this.borrow_mut().children.push(Rc::clone(&child));
     }
-    pub fn new_null(parent: Option<&Rc<RefCell<TreeNode>>>) -> Rc<RefCell<Self>> {
+    pub fn new_null(parent: Option<&Rc<RefCell<FSMNode>>>) -> Rc<RefCell<Self>> {
         let parent_ref = if let Some(parent) = parent {
             Some(Rc::clone(parent))
         } else {
@@ -296,7 +296,7 @@ impl TreeNode {
 
     fn get_all_leaves_internal(
         &self,
-        discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>,
+        discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>,
         visited_nodes: &mut HashSet<Uuid>,
     ) {
         for child in &self.children {
@@ -312,23 +312,23 @@ impl TreeNode {
             }
         }
     }
-    fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<TreeNode>>>) {
+    fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>) {
         self.get_all_leaves_internal(discovered_leaves, &mut HashSet::new());
     }
-    pub fn add_child_to_all_leaves(this: &Rc<RefCell<TreeNode>>, child: &Rc<RefCell<TreeNode>>) {
+    pub fn add_child_to_all_leaves(this: &Rc<RefCell<FSMNode>>, child: &Rc<RefCell<FSMNode>>) {
         let mut leaves = Vec::new();
         this.borrow().get_all_leaves(&mut leaves);
         while let Some(node) = leaves.pop() {
             if node.borrow().children.is_empty() {
-                TreeNode::add_child_cycle_safe(&node, child);
+                FSMNode::add_child_cycle_safe(&node, child);
             }
         }
         if this.borrow().children.is_empty() {
-            TreeNode::add_child_cycle_safe(&this, child);
+            FSMNode::add_child_cycle_safe(&this, child);
         }
     }
 
-    pub fn race_to_leaf(&self) -> Option<Rc<RefCell<TreeNode>>> {
+    pub fn race_to_leaf(&self) -> Option<Rc<RefCell<FSMNode>>> {
         self.do_stuff_cycle_aware(&mut |_, child| child.borrow().children.is_empty())
     }
     pub fn dbg(&self) {
@@ -336,7 +336,7 @@ impl TreeNode {
         self.dbg_internal(0, &mut HashSet::new());
     }
 
-    pub fn new(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+    pub fn new(value: NodeType, parent: &Rc<RefCell<FSMNode>>) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
             value,
             parent: Some(Rc::clone(parent)),
@@ -347,7 +347,7 @@ impl TreeNode {
         ret
     }
 
-    pub fn new_required(value: NodeType, parent: &Rc<RefCell<TreeNode>>) -> Rc<RefCell<Self>> {
+    pub fn new_required(value: NodeType, parent: &Rc<RefCell<FSMNode>>) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
             value,
             parent: Some(Rc::clone(parent)),
@@ -373,14 +373,14 @@ impl TreeNode {
 
     pub fn new_keyword_with_parent(
         expanded_name: String,
-        parent: Rc<RefCell<TreeNode>>,
+        parent: Rc<RefCell<FSMNode>>,
     ) -> Rc<RefCell<Self>> {
         let ret = Self::new_keyword(expanded_name);
         ret.borrow_mut().parent = Some(Rc::clone(&parent));
-        TreeNode::add_child_cycle_safe(&parent, &ret);
+        FSMNode::add_child_cycle_safe(&parent, &ret);
         ret
     }
-    fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
+    fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<FSMNode>>> {
         for child in &self.children {
             if let Keyword(Keyword { short: nshort, .. }) = &child.borrow().value
                 && nshort == short
@@ -414,8 +414,8 @@ impl TreeNode {
         false
     }
 
-    fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
-        self.do_stuff_cycle_aware_non_greedy(&mut |child: Rc<RefCell<TreeNode>>| {
+    fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<FSMNode>>> {
+        self.do_stuff_cycle_aware_non_greedy(&mut |child: Rc<RefCell<FSMNode>>| {
             println!("awa?");
             match &child.borrow().value {
                 Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
@@ -425,7 +425,7 @@ impl TreeNode {
             }
         })
     }
-    fn handle_potential_conflict_internal(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
+    fn handle_potential_conflict_internal(&self, child: &Rc<RefCell<FSMNode>>) -> bool {
         let child_borrow = child.borrow();
         let mut ret = false;
         if let Keyword(Keyword { short: cshort, .. }) = &child_borrow.value {
@@ -452,7 +452,7 @@ impl TreeNode {
         }
         ret
     }
-    pub fn handle_potential_conflict(&self, child: &Rc<RefCell<TreeNode>>) -> bool {
+    pub fn handle_potential_conflict(&self, child: &Rc<RefCell<FSMNode>>) -> bool {
         let child_borrow = child.borrow();
         if let Keyword(keyword_struct) = &child_borrow.value {
             debug_println!("{:?}", self.value);
@@ -501,17 +501,17 @@ impl TreeNode {
     }
 }
 
-type InternalCursor = Weak<RefCell<TreeNode>>;
-pub struct TreeCursor {
+type InternalCursor = Weak<RefCell<FSMNode>>;
+pub struct FSMCursor {
     cur_ast_pos: InternalCursor,
     input_buf: String,
     unfinished_nodes: Vec<InternalCursor>,
 }
 
-impl TreeCursor {
-    pub fn new(ast_root: &Rc<RefCell<TreeNode>>) -> Self {
+impl FSMCursor {
+    pub fn new(fsm_root: &Rc<RefCell<FSMNode>>) -> Self {
         Self {
-            cur_ast_pos: Rc::downgrade(ast_root),
+            cur_ast_pos: Rc::downgrade(fsm_root),
             input_buf: String::new(),
             unfinished_nodes: Vec::new(),
         }
@@ -544,10 +544,7 @@ impl TreeCursor {
     pub fn clear_inputbuf(&mut self) {
         self.input_buf.clear();
     }
-    fn search_for_userdefs(
-        &self,
-        treenode: &Rc<RefCell<TreeNode>>,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
+    fn search_for_userdefs(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
         treenode
             .borrow()
             .do_stuff_cycle_aware_non_greedy(&mut |child| match child.borrow().value {
@@ -555,14 +552,14 @@ impl TreeCursor {
                 _ => false,
             })
     }
-    pub fn search_rec(&self, treenode: &Rc<RefCell<TreeNode>>) -> Option<Rc<RefCell<TreeNode>>> {
+    pub fn search_rec(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
         self.search_rec_internal(treenode, false)
     }
     pub fn search_rec_internal(
         &self,
-        treenode: &Rc<RefCell<TreeNode>>,
+        treenode: &Rc<RefCell<FSMNode>>,
         best_effort: bool,
-    ) -> Option<Rc<RefCell<TreeNode>>> {
+    ) -> Option<Rc<RefCell<FSMNode>>> {
         debug_println!(
             "search_rec at {:?} {}",
             treenode.borrow().value,
@@ -729,7 +726,7 @@ impl TreeCursor {
         None
     }
 
-    fn update_cursor(&mut self, node: &Rc<RefCell<TreeNode>>) {
+    fn update_cursor(&mut self, node: &Rc<RefCell<FSMNode>>) {
         self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
@@ -764,7 +761,7 @@ impl TreeCursor {
         }
     }
 
-    fn get_cur_ast_binding(&self) -> Rc<RefCell<TreeNode>> {
+    fn get_cur_ast_binding(&self) -> Rc<RefCell<FSMNode>> {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
@@ -778,7 +775,7 @@ impl TreeCursor {
         println!("{}", self.get_cur_ast_binding().borrow().id);
         self.get_cur_ast_binding().borrow().value.clone()
     }
-    fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<TreeNode>>> {
+    fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<FSMNode>>> {
         let binding = self.get_cur_ast_binding();
         let binding = binding.borrow();
         binding.find_node_with_code(short)
@@ -791,17 +788,17 @@ mod tests {
 
     #[test]
     fn simple_tree() {
-        let root = TreeNode::new_keyword("int".to_string());
-        let _other = TreeNode::new_keyword_with_parent("asdf".to_string(), root.clone());
+        let root = FSMNode::new_keyword("int".to_string());
+        let _other = FSMNode::new_keyword_with_parent("asdf".to_string(), root.clone());
         assert_eq!(root.borrow().children.len(), 1);
     }
 
     #[test]
     fn simple_cursor_steps() {
-        let root = TreeNode::new_null(None);
-        let second = TreeNode::new_keyword_with_parent("int".to_string(), root.clone());
-        TreeNode::new_keyword_with_parent("asdf".to_string(), second.clone());
-        let mut cursor = TreeCursor::new(&root);
+        let root = FSMNode::new_null(None);
+        let second = FSMNode::new_keyword_with_parent("int".to_string(), root.clone());
+        FSMNode::new_keyword_with_parent("asdf".to_string(), second.clone());
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!(cursor.get_current_nodeval(), Null);
         cursor.advance('i').unwrap();
         assert_eq!(
@@ -817,16 +814,16 @@ mod tests {
 
     #[test]
     fn test_conflict_check() {
-        let root = TreeNode::new_null(None);
+        let root = FSMNode::new_null(None);
         let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
-        let child = TreeNode::new(sign_token.clone(), &root);
+        let child = FSMNode::new(sign_token.clone(), &root);
         sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
 
-        let child2 = TreeNode::new(sign_token, &root);
-        let types = TreeNode::new_required(NodeType::Null, &child);
+        let child2 = FSMNode::new(sign_token, &root);
+        let types = FSMNode::new_required(NodeType::Null, &child);
 
-        let int = TreeNode::new_keyword_with_parent("int".to_string(), types.clone());
-        let float = TreeNode::new_keyword_with_parent("short".to_string(), types.clone());
+        let int = FSMNode::new_keyword_with_parent("int".to_string(), types.clone());
+        let float = FSMNode::new_keyword_with_parent("short".to_string(), types.clone());
         child.borrow_mut().add_child(&types);
         child2.borrow_mut().add_child(&types);
 
@@ -838,38 +835,38 @@ mod tests {
 
     #[test]
     fn test_keyword_matching() {
-        let root = TreeNode::new_null(None);
+        let root = FSMNode::new_null(None);
         let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
-        let child = TreeNode::new(sign_token.clone(), &root);
+        let child = FSMNode::new(sign_token.clone(), &root);
         sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
 
-        let child2 = TreeNode::new(sign_token, &root);
-        let types = TreeNode::new_required(NodeType::Null, &child);
+        let child2 = FSMNode::new(sign_token, &root);
+        let types = FSMNode::new_required(NodeType::Null, &child);
 
-        let int = TreeNode::new_keyword_with_parent("int".to_string(), types.clone());
-        let float = TreeNode::new_keyword_with_parent("short".to_string(), types.clone());
+        let int = FSMNode::new_keyword_with_parent("int".to_string(), types.clone());
+        let float = FSMNode::new_keyword_with_parent("short".to_string(), types.clone());
         root.borrow_mut().add_child(&types);
         child2.borrow_mut().add_child(&types);
 
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert!(cursor.advance('s').is_none());
         assert!(cursor.advance('h').is_some());
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert!(cursor.advance('u').is_some());
         assert!(cursor.advance('s').is_some());
     }
 
     #[test]
     fn test_deep_clone() {
-        let root = TreeNode::new_null(None);
+        let root = FSMNode::new_null(None);
         let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
-        let child = TreeNode::new(sign_token.clone(), &root);
+        let child = FSMNode::new(sign_token.clone(), &root);
         sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
 
-        let child2 = TreeNode::new(sign_token, &root);
-        let types = TreeNode::new_required(NodeType::Null, &child);
+        let child2 = FSMNode::new(sign_token, &root);
+        let types = FSMNode::new_required(NodeType::Null, &child);
         println!("hi?");
-        TreeNode::add_child_cycle_safe(&types, &root);
+        FSMNode::add_child_cycle_safe(&types, &root);
         let cloned_root = root.borrow().deep_clone();
         let root = root.borrow();
         let cloned_root = cloned_root.borrow();
@@ -888,7 +885,7 @@ mod tests {
         t3 ::= 'a';
         ";
         let root = frontend::create_graph_from_ebnf(bnf).unwrap();
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!("r", cursor.advance('r').unwrap());
         assert_eq!("a", cursor.advance('a').unwrap());
         assert!(cursor.is_done());
@@ -902,12 +899,12 @@ mod tests {
         t3 ::= 'a';
         ";
         let root = frontend::create_graph_from_ebnf(bnf).unwrap();
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!("t", cursor.advance('t').unwrap());
         assert_eq!("t", cursor.advance('t').unwrap());
         assert!(cursor.is_done());
 
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!("t", cursor.advance('t').unwrap());
         assert_eq!("e", cursor.advance('e').unwrap());
         assert_eq!("s", cursor.advance('s').unwrap());
@@ -915,7 +912,7 @@ mod tests {
         assert_eq!("t", cursor.advance('t').unwrap());
         assert!(cursor.is_done());
 
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!("t", cursor.advance('t').unwrap());
         assert_eq!("e", cursor.advance('e').unwrap());
         assert_eq!("s", cursor.advance('s').unwrap());
@@ -930,11 +927,11 @@ mod tests {
         t2 ::= ( 's' )?; 
         ";
         let root = frontend::create_graph_from_ebnf(bnf).unwrap();
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!("te", cursor.advance('t').unwrap());
         assert_eq!("t", cursor.advance('t').unwrap());
         assert!(cursor.is_done());
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!("te", cursor.advance('t').unwrap());
         assert_eq!("s", cursor.advance('s').unwrap());
         assert_eq!("t", cursor.advance('t').unwrap());
@@ -954,7 +951,7 @@ mod tests {
         col ::= #'^.*[, ]$';
     ";
         let root = frontend::create_graph_from_ebnf(bnf).unwrap();
-        let mut cursor = TreeCursor::new(&root);
+        let mut cursor = FSMCursor::new(&root);
         assert_eq!("SELECT", cursor.advance('S').unwrap());
         assert_eq!(None, cursor.advance('a'));
         assert_eq!(",", cursor.advance(',').unwrap());
@@ -974,7 +971,7 @@ mod tests {
         let root = frontend::create_graph_from_ebnf(bnf).unwrap();
         // >:3
         for i in 0..=30 {
-            let mut cursor = TreeCursor::new(&root);
+            let mut cursor = FSMCursor::new(&root);
             assert_eq!("t", cursor.advance('t').unwrap());
             for _ in 0..i {
                 assert_eq!("e", cursor.advance('e').unwrap());
