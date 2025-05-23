@@ -1,6 +1,10 @@
 #![feature(let_chains)]
 
-use std::io::Write;
+use std::{
+    fs::File,
+    io::{self, Read, Write},
+    path::Path,
+};
 
 use console::Term;
 use lib::{frontend::print_parsed_ebnf, *};
@@ -16,8 +20,13 @@ fn main() {
     ";
     // Repeat nodes:
     // identifier ::= letter { letter | digit | "_" };
-    print_parsed_ebnf(sql);
-    if let Ok(root) = frontend::create_graph_from_ebnf(sql) {
+    let mut complete_ebnf = String::new();
+    File::open(&Path::new("sql.ebnf"))
+        .unwrap()
+        .read_to_string(&mut complete_ebnf)
+        .unwrap();
+    print_parsed_ebnf(&complete_ebnf);
+    if let Ok(root) = frontend::create_graph_from_ebnf(&complete_ebnf) {
         root.borrow().dbg();
         let mut cursor = TreeCursor::new(&root);
 
