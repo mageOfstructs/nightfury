@@ -720,7 +720,7 @@ impl TreeCursor {
                             let res = self.handle_userdefined(input, &final_chars);
                             res
                         }
-                        NodeType::UserDefinedRegex(r) => None,
+                        NodeType::UserDefinedRegex(_) => None,
                         _ => unreachable!(),
                     };
                 }
