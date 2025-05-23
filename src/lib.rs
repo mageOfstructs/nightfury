@@ -866,4 +866,51 @@ mod tests {
         assert_eq!("a", cursor.advance('a').unwrap());
         assert!(cursor.is_done());
     }
+
+    #[test]
+    fn test_optional() {
+        let bnf = r"
+        t1 ::= 't' ( 'e' t2 )? 't';
+        t2 ::= 's' ( t3 )?;
+        t3 ::= 'a';
+        ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
+
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert_eq!("e", cursor.advance('e').unwrap());
+        assert_eq!("s", cursor.advance('s').unwrap());
+        assert_eq!("a", cursor.advance('a').unwrap());
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
+
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert_eq!("e", cursor.advance('e').unwrap());
+        assert_eq!("s", cursor.advance('s').unwrap());
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
+    }
+
+    #[test]
+    fn test_optional2() {
+        let bnf = r"
+        t1 ::= 'te' t2 't';
+        t2 ::= ( 's' )?; 
+        ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!("te", cursor.advance('t').unwrap());
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
+        let mut cursor = TreeCursor::new(&root);
+        assert_eq!("te", cursor.advance('t').unwrap());
+        assert_eq!("s", cursor.advance('s').unwrap());
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
+    }
 }
