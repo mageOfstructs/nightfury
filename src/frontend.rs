@@ -82,7 +82,6 @@ fn handle_node(
             let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
             nodes.iter().for_each(|node| {
                 debug_println!("Multiple at {node:?}");
-                // FIXME: if node is a terminal with an optional at the end, this won't catch that
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
                 debug_println!("Multiple got back:");
                 tree_bit.borrow().dbg();
