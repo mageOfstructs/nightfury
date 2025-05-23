@@ -103,6 +103,9 @@ fn handle_node(
                     }
                 }
             });
+            if let Some(opt) = last_opt {
+                TreeNode::add_child_to_all_leaves(&opt, &TreeNode::new_null(Some(&cur_treenode)));
+            }
             cur_treenode
         }
         Node::RegexExt(node, RegexExtKind::Optional) | Node::Optional(node) => {
