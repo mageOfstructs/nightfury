@@ -3,30 +3,21 @@
 use std::io::Write;
 
 use console::Term;
-use lib::{frontend::do_stuff, *};
+use lib::{frontend::print_parsed_ebnf, *};
 use regex::Regex;
 
 fn main() {
-    // let ebnf = r"
-    //     syntax ::= ( signed_keyword )? types value;
-    //     signed_keyword ::= 'signed' | 'unsigned';
-    //     types ::= 'int' | 'short';
-    //     value ::= #'^.+;$';
-    // ";
-    let ebnf = r"
-        list ::= #'[0-9]' ( ',' list )?;
-    ";
-    let ebnf = r"
+    let sql = r"
         query ::= select | insert;
-        select ::= 'SELECT' collist 'FROM' #'^.*;$';
-        insert ::= 'INSERT INTO' #'^.* $' 'VALUES' '(' collist2 ')';
+        select ::= 'SELECT' '*' | collist 'FROM' #'^.*;$';
+        insert ::= 'INSERT INTO' #'^.* $' 'VALUES' '(' collist ')';
         collist ::= col ( ',' collist )?;
-        collist2 ::= col2 ( ',' collist2 )?;
-        col ::= #'^.*[, ]$' | '*';
-        col2 ::= #'^.*[, ]$' | '*';
+        col ::= #'^.*[, ]$';
     ";
-    do_stuff(ebnf);
-    if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
+    // Repeat nodes:
+    // identifier ::= letter { letter | digit | "_" };
+    print_parsed_ebnf(sql);
+    if let Ok(root) = frontend::create_graph_from_ebnf(sql) {
         root.borrow().dbg();
         let mut cursor = TreeCursor::new(&root);
 

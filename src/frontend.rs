@@ -6,21 +6,26 @@ use regex::Regex;
 
 use crate::TreeNode;
 
-pub fn do_stuff(syntax: &str) {
+pub fn print_parsed_ebnf(syntax: &str) {
     let grammar = ebnf::get_grammar(&syntax).unwrap();
     for node in grammar.expressions {
         println!("{:?}", node);
     }
 }
 
+enum TerminalState {
+    Stub,
+    Created,
+}
+
 fn handle_node(
     grammar: &Grammar,
     cur_node: &Node,
     cur_root: &Rc<RefCell<TreeNode>>,
-    terminals: &mut HashMap<String, Rc<RefCell<TreeNode>>>,
+    terminals: &mut HashMap<String, (Rc<RefCell<TreeNode>>, TerminalState)>,
 ) -> Rc<RefCell<TreeNode>> {
     debug_println!("handle_node got {:?}", cur_node);
-    match &cur_node {
+    let ret = match &cur_node {
         Node::String(str) => {
             TreeNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root))
         }
@@ -31,16 +36,44 @@ fn handle_node(
         Node::Terminal(name) => {
             if terminals.contains_key(name) {
                 debug_println!("Found {name} in cache!");
-                cur_root
-                    .borrow_mut()
-                    .add_child(terminals.get(name).unwrap());
-                Rc::clone(&terminals.get(name).unwrap())
+                let term = terminals.get(name).unwrap();
+                let term_clone = match term.1 {
+                    TerminalState::Stub => term.0.clone(),
+                    TerminalState::Created => term.0.borrow().deep_clone(),
+                };
+                println!("linking back to {}", term_clone.borrow().short_id());
+                // println!("cur_root:");
+                // cur_root.borrow().dbg();
+                // println!("term:");
+                // term_clone.borrow().dbg();
+                TreeNode::add_child_cycle_safe(cur_root, &term_clone);
+                println!("after add:");
+                cur_root.borrow().dbg();
+                term_clone
             } else {
-                let terminal =
-                    find_terminal(&grammar, &name).expect("Terminal reference not found!");
-                let term_root = TreeNode::new_null(Some(cur_root));
-                terminals.insert(name.to_string(), Rc::clone(&term_root));
-                handle_node(grammar, &terminal.rhs, &term_root, terminals)
+                debug_println!("Creating terminal {name}...");
+                let terminal = find_terminal(&grammar, &name);
+                if terminal.is_none() {
+                    panic!("Terminal reference '{name}' not found!");
+                }
+                let terminal = terminal.unwrap();
+                let term_root = TreeNode::new_null(None);
+                debug_println!("term_root: {}", term_root.borrow().short_id());
+                terminals.insert(
+                    name.to_string(),
+                    (Rc::clone(&term_root), TerminalState::Stub),
+                );
+                handle_node(grammar, &terminal.rhs, &term_root, terminals);
+                terminals.insert(
+                    name.to_string(),
+                    (Rc::clone(&term_root), TerminalState::Created),
+                );
+                debug_println!("Finish terminal");
+                debug_println!("young {}:", name);
+                term_root.borrow().dbg();
+                let ret = term_root.borrow().deep_clone();
+                TreeNode::add_child_cycle_safe(cur_root, &ret);
+                ret
             }
         }
         Node::Multiple(nodes) => {
@@ -48,37 +81,40 @@ fn handle_node(
             // TODO: this doesn't handle multiple Optionals in a row!!! Make this a Vec instead
             let mut last_opt: Option<Rc<RefCell<TreeNode>>> = None;
             nodes.iter().for_each(|node| {
-                debug_println!("{node:?}");
+                debug_println!("Multiple at {node:?}");
+                // FIXME: if node is a terminal with an optional at the end, this won't catch that
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
+                debug_println!("Multiple got back:");
+                tree_bit.borrow().dbg();
                 if let Some(last_opt) = &last_opt {
                     TreeNode::add_child_to_all_leaves(&last_opt, &tree_bit);
                     // yes this needs to be here
-                    last_opt.borrow_mut().handle_potential_conflict(&tree_bit);
+                    last_opt.borrow().handle_potential_conflict(&tree_bit);
                 }
                 match node {
-                    Node::RegexExt(_, RegexExtKind::Optional) | Node::Optional(_) => {
+                    Node::RegexExt(_, RegexExtKind::Optional)
+                    | Node::Optional(_)
+                    | Node::Repeat(_) => {
                         last_opt = Some(tree_bit);
                     }
                     _ => {
                         last_opt = None;
-                        // FIXME: this can lead us astray if the we merged an already used Terminal into our path
                         cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
                     }
                 }
             });
             cur_treenode
         }
-        Node::RegexExt(node, RegexExtKind::Optional) => {
+        Node::RegexExt(node, RegexExtKind::Optional) | Node::Optional(node) => {
             handle_node(grammar, &node, cur_root, terminals)
         }
-        Node::Optional(node) => handle_node(grammar, &node, cur_root, terminals),
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
             let t1 = handle_node(grammar, &n1.to_owned(), &cur_root, terminals);
             let t2 = handle_node(grammar, &n2.to_owned(), &t1, terminals);
             t1
         }
         Node::Symbol(n1, SymbolKind::Alternation, n2) => {
-            let root = TreeNode::new_null(Some(cur_root));
+            let root = TreeNode::new_null(Some(cur_root)); // do we *really* need this?
             let t1 = handle_node(grammar, &n1.to_owned(), &root, terminals);
             let t2 = handle_node(grammar, &n2.to_owned(), &root, terminals);
             let child = TreeNode::new_null(None);
@@ -87,14 +123,20 @@ fn handle_node(
             root
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
-        Node::Repeat(_) => {
-            panic!("We got a Repeat node! go look at the bnf and see what it's supposed to be")
+        Node::Repeat(node) => {
+            // FIXME: repeats can apparently also mean 0
+            let subroot = handle_node(grammar, &node, cur_root, terminals);
+            TreeNode::add_child_cycle_safe(&subroot, &subroot);
+            subroot
         }
         _ => {
-            println!("Unimplemented: {cur_node:?}");
+            eprintln!("Unimplemented: {cur_node:?}");
             todo!()
         }
-    }
+    };
+    // println!("cur_root:");
+    // cur_root.borrow().dbg();
+    ret
 }
 
 fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expression> {
@@ -106,10 +148,19 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<TreeNode>>, Strin
         Ok(grammar) => {
             let root = TreeNode::new_null(None);
             let root_node = grammar.expressions.get(0).expect("Empty BNF!");
-            let mut terminals: HashMap<String, Rc<RefCell<TreeNode>>> = HashMap::new();
-            handle_node(&grammar, &root_node.rhs, &root, &mut terminals);
+            let mut terminals = HashMap::new();
+            handle_node(
+                &grammar,
+                &Node::Terminal(root_node.lhs.to_owned()),
+                &root,
+                &mut terminals,
+            );
             // sanity op, is_done() won't cancel preemptively
             TreeNode::add_child_to_all_leaves(&root, &TreeNode::new_null(None));
+            for (name, term) in terminals.iter() {
+                println!("Term {}", name);
+                term.0.borrow().dbg();
+            }
             Ok(root)
         }
         Err(err) => Err(err.to_string()),
