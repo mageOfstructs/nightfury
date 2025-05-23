@@ -964,4 +964,22 @@ mod tests {
         assert_eq!(";", cursor.advance(';').unwrap());
         assert!(cursor.is_done());
     }
+
+    #[test]
+    fn test_repeat() {
+        let bnf = r"
+        t1 ::= 't' { 'e' } 'st';
+    ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        // >:3
+        for i in 0..=30 {
+            let mut cursor = TreeCursor::new(&root);
+            assert_eq!("t", cursor.advance('t').unwrap());
+            for _ in 0..i {
+                assert_eq!("e", cursor.advance('e').unwrap());
+            }
+            assert_eq!("st", cursor.advance('s').unwrap());
+            assert!(cursor.is_done());
+        }
+    }
 }

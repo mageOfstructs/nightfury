@@ -131,8 +131,12 @@ fn handle_node(
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
         Node::Repeat(node) => {
-            // FIXME: repeats can apparently also mean 0
             let subroot = handle_node(grammar, &node, cur_root, terminals);
+
+            let dummy = TreeNode::new_null(None);
+            TreeNode::add_child_to_all_leaves(&subroot, &dummy);
+            TreeNode::add_child_cycle_safe(&cur_root, &dummy);
+
             TreeNode::add_child_cycle_safe(&subroot, &subroot);
             subroot
         }
