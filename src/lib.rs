@@ -128,6 +128,7 @@ pub struct NodeValue {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TreeNode {
     id: Uuid,
+    is_done: bool,
     value: NodeType,
     parent: Option<Rc<RefCell<TreeNode>>>,
     children: Vec<Rc<RefCell<TreeNode>>>,
@@ -137,6 +138,7 @@ impl Default for TreeNode {
     fn default() -> Self {
         Self {
             id: Uuid::new_v4(),
+            is_done: false,
             value: Null,
             parent: None,
             children: Vec::new(),
@@ -153,10 +155,8 @@ impl TreeNode {
         for child in &old.children {
             if !visited_nodes.contains_key(&child.borrow().id) {
                 let clone = Rc::new(RefCell::new(Self {
-                    id: Uuid::new_v4(),
                     value: child.borrow().value.clone(),
-                    parent: None, // is deprecated anyways
-                    children: Vec::new(),
+                    ..Default::default()
                 }));
                 visited_nodes.insert(child.borrow().id, clone.clone());
                 TreeNode::deep_clone_internal(&clone, &child.borrow(), visited_nodes);
@@ -173,10 +173,8 @@ impl TreeNode {
     pub fn deep_clone(&self) -> Rc<RefCell<Self>> {
         debug_println!("Deep cloning node {}", self.short_id());
         let ret = Rc::new(RefCell::new(Self {
-            id: Uuid::new_v4(),
             value: self.value.clone(),
-            parent: None, // is deprecated anyways
-            children: Vec::new(),
+            ..Default::default()
         }));
         let mut visited_nodes = HashMap::new();
         visited_nodes.insert(self.id, ret.clone());
@@ -628,6 +626,25 @@ impl TreeCursor {
             borrow.short_id()
         );
         self.input_buf.push(input);
+        // TODO: refactor
+        if borrow.is_done {
+            let res = self.search_rec(&binding);
+            if let Some(node) = res {
+                self.update_cursor(&node);
+                return match &node.borrow().value {
+                    NodeType::Keyword(Keyword { expanded, .. }) => {
+                        self.input_buf.clear();
+                        Some(expanded.clone())
+                    }
+                    NodeType::UserDefined { final_chars } => {
+                        let res = self.handle_userdefined(input, &final_chars);
+                        res
+                    }
+                    NodeType::UserDefinedRegex(_) => None,
+                    _ => unreachable!(),
+                };
+            }
+        }
         match &borrow.value {
             NodeType::UserDefined { final_chars, .. } => {
                 let res = self.handle_userdefined(input, final_chars);
@@ -638,6 +655,10 @@ impl TreeCursor {
             NodeType::UserDefinedRegex(r) => {
                 debug_println!("Checking regex against '{}'", &self.input_buf);
                 if r.is_match(&self.input_buf) {
+                    drop(borrow);
+                    binding.borrow_mut().is_done = true;
+                    let borrow = binding.borrow();
+
                     self.input_buf.clear();
                     self.input_buf.push(input);
                     let mut next_node = self.search_rec_internal(&binding, true);
@@ -937,6 +958,10 @@ mod tests {
         assert_eq!(None, cursor.advance('a'));
         assert_eq!(",", cursor.advance(',').unwrap());
         assert_eq!(None, cursor.advance('b'));
-        assert_eq!("FROM", cursor.advance(' ').unwrap());
+        cursor.advance(' ');
+        assert_eq!("FROM", cursor.advance('F').unwrap());
+        cursor.advance('a');
+        assert_eq!(";", cursor.advance(';').unwrap());
+        assert!(cursor.is_done());
     }
 }
