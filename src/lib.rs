@@ -332,6 +332,7 @@ impl TreeNode {
         self.do_stuff_cycle_aware(&mut |_, child| child.borrow().children.is_empty())
     }
     pub fn dbg(&self) {
+        #[cfg(debug_assertions)]
         self.dbg_internal(0, &mut HashSet::new());
     }
 
