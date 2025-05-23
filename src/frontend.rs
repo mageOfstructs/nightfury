@@ -85,30 +85,35 @@ fn handle_node(
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
                 debug_println!("Multiple got back:");
                 tree_bit.borrow().dbg();
-                if let Some(last_opt) = &last_opt {
-                    TreeNode::add_child_to_all_leaves(&last_opt, &tree_bit);
-                    // yes this needs to be here
-                    last_opt.borrow().handle_potential_conflict(&tree_bit);
-                }
-                match node {
-                    Node::RegexExt(_, RegexExtKind::Optional)
-                    | Node::Optional(_)
-                    | Node::Repeat(_) => {
-                        last_opt = Some(tree_bit);
-                    }
-                    _ => {
-                        last_opt = None;
-                        cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
-                    }
-                }
+                // if let Some(last_opt) = &last_opt {
+                //     TreeNode::add_child_to_all_leaves(&last_opt, &tree_bit);
+                //     // yes this needs to be here
+                //     last_opt.borrow().handle_potential_conflict(&tree_bit);
+                // }
+                // match node {
+                //     Node::RegexExt(_, RegexExtKind::Optional)
+                //     | Node::Optional(_)
+                //     | Node::Repeat(_) => {
+                //         last_opt = Some(tree_bit);
+                //     }
+                //     _ => {
+                //         last_opt = None;
+                //         cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
+                //     }
+                // }
+                cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
             });
-            if let Some(opt) = last_opt {
-                TreeNode::add_child_to_all_leaves(&opt, &TreeNode::new_null(Some(&cur_treenode)));
-            }
+            // if let Some(opt) = last_opt {
+            //     TreeNode::add_child_to_all_leaves(&opt, &TreeNode::new_null(Some(&cur_treenode)));
+            // }
             cur_treenode
         }
         Node::RegexExt(node, RegexExtKind::Optional) | Node::Optional(node) => {
-            handle_node(grammar, &node, cur_root, terminals)
+            let tree_bit = handle_node(grammar, &node, cur_root, terminals);
+            let dummy = TreeNode::new_null(None);
+            TreeNode::add_child_to_all_leaves(&tree_bit, &dummy);
+            TreeNode::add_child_cycle_safe(&cur_root, &dummy);
+            tree_bit
         }
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
             let t1 = handle_node(grammar, &n1.to_owned(), &cur_root, terminals);
@@ -116,7 +121,7 @@ fn handle_node(
             t1
         }
         Node::Symbol(n1, SymbolKind::Alternation, n2) => {
-            let root = TreeNode::new_null(Some(cur_root)); // do we *really* need this?
+            let root = TreeNode::new_null(Some(cur_root));
             let t1 = handle_node(grammar, &n1.to_owned(), &root, terminals);
             let t2 = handle_node(grammar, &n2.to_owned(), &root, terminals);
             let child = TreeNode::new_null(None);
@@ -126,8 +131,12 @@ fn handle_node(
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
         Node::Repeat(node) => {
-            // FIXME: repeats can apparently also mean 0
             let subroot = handle_node(grammar, &node, cur_root, terminals);
+
+            let dummy = TreeNode::new_null(None);
+            TreeNode::add_child_to_all_leaves(&subroot, &dummy);
+            TreeNode::add_child_cycle_safe(&cur_root, &dummy);
+
             TreeNode::add_child_cycle_safe(&subroot, &subroot);
             subroot
         }
