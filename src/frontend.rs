@@ -110,8 +110,9 @@ fn handle_node(
         }
         Node::RegexExt(node, RegexExtKind::Optional) | Node::Optional(node) => {
             let tree_bit = handle_node(grammar, &node, cur_root, terminals);
-            let dummy = TreeNode::new_null(Some(&cur_root));
+            let dummy = TreeNode::new_null(None);
             TreeNode::add_child_to_all_leaves(&tree_bit, &dummy);
+            TreeNode::add_child_cycle_safe(&cur_root, &dummy);
             tree_bit
         }
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
