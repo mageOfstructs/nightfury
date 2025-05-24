@@ -662,6 +662,8 @@ impl FSMCursor {
                     let mut next_node = self.search_rec_internal(&binding, true);
                     if next_node.is_none() {
                         println!("No node found");
+                        self.input_buf.clear();
+                        return None;
                         next_node =
                             Some(Rc::clone(&borrow.children.get(0).expect(
                                 "UserDefinedRegex doesn't have a child and is therefore sad",
