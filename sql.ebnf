@@ -16,7 +16,7 @@ order_by_clause ::= "ORDER BY" column_name [ "ASC" | "DESC" ] { "," column_name 
 
 condition ::= expression comparison_operator expression | condition logical_operator condition | "(" condition ")";
 
-insert_statement ::= "INSERT INTO" table_name "(" column_name { "," column_name } ")" "VALUES" "(" value { "," value } ")";
+insert_statement ::= "INSERT INTO" table_name ( "(" column_name { "," column_name } ")" )? "VALUES" "(" value { "," value } ")";
 
 update_statement ::= "UPDATE" table_name "SET" column_name "=" value { "," column_name "=" value } [ where_clause ];
 
