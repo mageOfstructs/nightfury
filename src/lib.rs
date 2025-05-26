@@ -184,7 +184,7 @@ impl FSMNode {
     }
     fn do_stuff_cycle_aware(
         &self,
-        op: &mut impl FnMut(&FSMNode, Rc<RefCell<FSMNode>>) -> bool,
+        op: &mut impl FnMut(&mut HashSet<Uuid>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
     ) -> Option<Rc<RefCell<FSMNode>>> {
         let mut visited_nodes = HashSet::new();
         visited_nodes.insert(self.id);
@@ -192,13 +192,13 @@ impl FSMNode {
     }
     fn do_stuff_cycle_aware_internal(
         &self,
-        op: &mut impl FnMut(&FSMNode, Rc<RefCell<FSMNode>>) -> bool,
+        op: &mut impl FnMut(&mut HashSet<Uuid>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
         visited_nodes: &mut HashSet<Uuid>,
     ) -> Option<Rc<RefCell<FSMNode>>> {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
-                if op(self, child.clone()) {
+                if op(visited_nodes, self, child.clone()) {
                     return Some(child.clone());
                 }
                 if let Some(child) = child
@@ -241,7 +241,7 @@ impl FSMNode {
         None
     }
     fn has_useful_children(&self) -> bool {
-        self.do_stuff_cycle_aware(&mut |_, c| match c.borrow().value {
+        self.do_stuff_cycle_aware(&mut |_, _, c| match c.borrow().value {
             Null => false,
             _ => true,
         })
@@ -330,7 +330,15 @@ impl FSMNode {
     }
 
     pub fn race_to_leaf(&self) -> Option<Rc<RefCell<FSMNode>>> {
-        self.do_stuff_cycle_aware(&mut |_, child| child.borrow().children.is_empty())
+        self.do_stuff_cycle_aware(&mut |visited_nodes, _, child| {
+            let mut ret = true;
+            for child in &child.borrow().children {
+                if !visited_nodes.contains(&child.borrow().id) {
+                    ret = false;
+                }
+            }
+            ret
+        })
     }
     pub fn dbg(&self) {
         #[cfg(debug_assertions)]
