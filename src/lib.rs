@@ -976,4 +976,40 @@ mod tests {
             assert!(cursor.is_done());
         }
     }
+
+    #[test]
+    fn test_terminal() {
+        let terms: usize = 100;
+        let mut bnf = String::with_capacity(terms * 14);
+        for i in 1..terms {
+            bnf.push_str(&format!("t{i:0>3} ::= t{:0>3};\n", i + 1));
+        }
+        bnf.push_str(&format!("t{terms:0>3} ::= 't' 'st';"));
+        println!("{bnf}");
+        let root = frontend::create_graph_from_ebnf(&bnf).unwrap();
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert_eq!("st", cursor.advance('s').unwrap());
+        assert!(cursor.is_done());
+    }
+
+    fn util_check_str(root: &Rc<RefCell<FSMNode>>, str: &str) {
+        let mut cursor = FSMCursor::new(root);
+        for char in str.chars() {
+            cursor.advance(char);
+        }
+        assert!(cursor.is_done())
+    }
+
+    #[test]
+    fn test_combi() {
+        let bnf = r"
+        t1 ::= ( 'u' | 'a' | 'o' ) { 'w' | 'v' } ( 'u' | 'a' | 'o' );
+    ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        util_check_str(&root, "uwu");
+        util_check_str(&root, "owo");
+        util_check_str(&root, "owwwwwo");
+        util_check_str(&root, "owwwwwu");
+    }
 }
