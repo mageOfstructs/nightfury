@@ -169,8 +169,7 @@ impl FSMNode {
         }
         stub.clone()
     }
-    // TODO: make deep_clone private
-    pub fn deep_clone(&self) -> Rc<RefCell<Self>> {
+    fn deep_clone(&self) -> Rc<RefCell<Self>> {
         debug_println!("Deep cloning node {}", self.short_id());
         let ret = Rc::new(RefCell::new(Self {
             value: self.value.clone(),
@@ -187,7 +186,9 @@ impl FSMNode {
         &self,
         op: &mut impl FnMut(&FSMNode, Rc<RefCell<FSMNode>>) -> bool,
     ) -> Option<Rc<RefCell<FSMNode>>> {
-        self.do_stuff_cycle_aware_internal(op, &mut HashSet::new())
+        let mut visited_nodes = HashSet::new();
+        visited_nodes.insert(self.id);
+        self.do_stuff_cycle_aware_internal(op, &mut visited_nodes)
     }
     fn do_stuff_cycle_aware_internal(
         &self,
