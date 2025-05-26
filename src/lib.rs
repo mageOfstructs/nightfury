@@ -655,19 +655,13 @@ impl FSMCursor {
                 if r.is_match(&self.input_buf) {
                     drop(borrow);
                     binding.borrow_mut().is_done = true;
-                    let borrow = binding.borrow();
-
                     self.input_buf.clear();
                     self.input_buf.push(input);
-                    let mut next_node = self.search_rec_internal(&binding, true);
+                    let next_node = self.search_rec_internal(&binding, true);
                     if next_node.is_none() {
                         println!("No node found");
                         self.input_buf.clear();
                         return Some(input.to_string());
-                        next_node =
-                            Some(Rc::clone(&borrow.children.get(0).expect(
-                                "UserDefinedRegex doesn't have a child and is therefore sad",
-                            )));
                     }
                     let next_node = next_node.unwrap();
                     self.update_cursor(&next_node);
