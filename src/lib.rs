@@ -580,11 +580,6 @@ impl FSMCursor {
                 );
                 match node_val {
                     NodeType::Keyword(Keyword { short, .. }) => {
-                        // bandaid logic
-                        visited_keywords += 1;
-                        if visited_keywords == 1 {
-                            last_keyword = Some(child.clone());
-                        }
                         if short.starts_with(&self.input_buf) {
                             debug_println!("{:?}", child.borrow().value);
                             debug_println!("{short} == {}", self.input_buf);
@@ -592,6 +587,11 @@ impl FSMCursor {
                             potential_matches += 1;
                             potential_matches > 1
                         } else {
+                            // bandaid logic
+                            visited_keywords += 1;
+                            if visited_keywords == 1 {
+                                last_keyword = Some(child.clone());
+                            }
                             false
                         }
                     }
@@ -663,7 +663,7 @@ impl FSMCursor {
                     if next_node.is_none() {
                         println!("No node found");
                         self.input_buf.clear();
-                        return None;
+                        return Some(input.to_string());
                         next_node =
                             Some(Rc::clone(&borrow.children.get(0).expect(
                                 "UserDefinedRegex doesn't have a child and is therefore sad",
@@ -758,7 +758,7 @@ impl FSMCursor {
         let ast_ref = self.cur_ast_pos.upgrade().unwrap();
         let binding = ast_ref.borrow();
         match binding.value {
-            UserDefinedRegex(..) | UserDefined { .. } => false,
+            UserDefinedRegex(..) | UserDefined { .. } if !binding.is_done => false,
             _ => binding.children.is_empty() || !binding.has_useful_children(),
         }
     }
