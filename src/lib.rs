@@ -6,6 +6,16 @@ use std::rc::{Rc, Weak};
 
 pub mod frontend;
 
+static mut CNT: usize = 0;
+fn get_id() -> usize {
+    let ret;
+    unsafe {
+        ret = CNT;
+        CNT += 1;
+    }
+    return ret;
+}
+
 // ironic that this only expands names
 struct NameShortener;
 impl NameShortener {
@@ -117,7 +127,6 @@ impl PartialMatch for Regex {
 use NodeType::*;
 use debug_print::debug_println;
 use regex::Regex;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NodeValue {
@@ -127,7 +136,7 @@ pub struct NodeValue {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FSMNode {
-    id: Uuid,
+    id: usize,
     is_done: bool,
     value: NodeType,
     parent: Option<Rc<RefCell<FSMNode>>>,
@@ -137,7 +146,7 @@ pub struct FSMNode {
 impl Default for FSMNode {
     fn default() -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: get_id(),
             is_done: false,
             value: Null,
             parent: None,
@@ -150,7 +159,7 @@ impl FSMNode {
     fn deep_clone_internal(
         stub: &Rc<RefCell<Self>>,
         old: &FSMNode,
-        visited_nodes: &mut HashMap<Uuid, Rc<RefCell<FSMNode>>>,
+        visited_nodes: &mut HashMap<usize, Rc<RefCell<FSMNode>>>,
     ) -> Rc<RefCell<Self>> {
         for child in &old.children {
             if !visited_nodes.contains_key(&child.borrow().id) {
@@ -184,7 +193,7 @@ impl FSMNode {
     }
     fn do_stuff_cycle_aware(
         &self,
-        op: &mut impl FnMut(&mut HashSet<Uuid>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
+        op: &mut impl FnMut(&mut HashSet<usize>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
     ) -> Option<Rc<RefCell<FSMNode>>> {
         let mut visited_nodes = HashSet::new();
         visited_nodes.insert(self.id);
@@ -192,8 +201,8 @@ impl FSMNode {
     }
     fn do_stuff_cycle_aware_internal(
         &self,
-        op: &mut impl FnMut(&mut HashSet<Uuid>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
-        visited_nodes: &mut HashSet<Uuid>,
+        op: &mut impl FnMut(&mut HashSet<usize>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
+        visited_nodes: &mut HashSet<usize>,
     ) -> Option<Rc<RefCell<FSMNode>>> {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
@@ -221,7 +230,7 @@ impl FSMNode {
     fn do_stuff_cycle_aware_non_greedy_internal(
         &self,
         op: &mut impl FnMut(Rc<RefCell<FSMNode>>) -> bool,
-        visited_nodes: &mut HashSet<Uuid>,
+        visited_nodes: &mut HashSet<usize>,
     ) -> Option<Rc<RefCell<FSMNode>>> {
         for child in &self.children {
             if !visited_nodes.contains(&child.borrow().id) {
@@ -280,17 +289,21 @@ impl FSMNode {
     }
 
     fn short_id(&self) -> String {
-        self.id.simple().to_string()[0..6].to_string()
+        format!("{:#x}", self.id)
     }
 
-    fn dbg_internal(&self, indent: usize, visited_nodes: &mut HashSet<Uuid>) {
+    fn dbg_internal(&self, indent: usize, visited_nodes: &mut HashSet<usize>) {
         println!("{}{:?} {}", " ".repeat(indent), self.value, self.short_id());
         visited_nodes.insert(self.id);
         for child in self.children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
                 child.borrow().dbg_internal(indent + 4, visited_nodes);
             } else {
-                println!("{}Cycle to {}", " ".repeat(indent + 4), child.borrow().id);
+                println!(
+                    "{}Cycle to {}",
+                    " ".repeat(indent + 4),
+                    child.borrow().short_id()
+                );
             }
         }
     }
@@ -298,7 +311,7 @@ impl FSMNode {
     fn get_all_leaves_internal(
         &self,
         discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>,
-        visited_nodes: &mut HashSet<Uuid>,
+        visited_nodes: &mut HashSet<usize>,
     ) {
         for child in &self.children {
             // debug_println!("at node {:?}; {}", child.borrow().value, child.borrow().id);
