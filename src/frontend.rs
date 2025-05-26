@@ -76,34 +76,14 @@ fn handle_node(
         }
         Node::Multiple(nodes) => {
             let mut cur_treenode = cur_root.clone();
-            // TODO: this doesn't handle multiple Optionals in a row!!! Make this a Vec instead
-            let mut last_opt: Option<Rc<RefCell<FSMNode>>> = None;
             nodes.iter().for_each(|node| {
                 debug_println!("Multiple at {node:?}");
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
                 debug_println!("Multiple got back:");
                 tree_bit.borrow().dbg();
-                // if let Some(last_opt) = &last_opt {
-                //     TreeNode::add_child_to_all_leaves(&last_opt, &tree_bit);
-                //     // yes this needs to be here
-                //     last_opt.borrow().handle_potential_conflict(&tree_bit);
-                // }
-                // match node {
-                //     Node::RegexExt(_, RegexExtKind::Optional)
-                //     | Node::Optional(_)
-                //     | Node::Repeat(_) => {
-                //         last_opt = Some(tree_bit);
-                //     }
-                //     _ => {
-                //         last_opt = None;
-                //         cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
-                //     }
-                // }
                 cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
+                debug_println!("cur_treenode now at: {}", cur_treenode.borrow().short_id());
             });
-            // if let Some(opt) = last_opt {
-            //     TreeNode::add_child_to_all_leaves(&opt, &TreeNode::new_null(Some(&cur_treenode)));
-            // }
             cur_treenode
         }
         Node::RegexExt(node, RegexExtKind::Optional) | Node::Optional(node) => {
@@ -129,13 +109,16 @@ fn handle_node(
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
         Node::Repeat(node) => {
+            // FIXME: doesn't really work if handle_node returns anything more
+            // complex than a single node
             let subroot = handle_node(grammar, &node, cur_root, terminals);
 
             let dummy = FSMNode::new_null(None);
             FSMNode::add_child_to_all_leaves(&subroot, &dummy);
             FSMNode::add_child_cycle_safe(&cur_root, &dummy);
 
-            FSMNode::add_child_cycle_safe(&subroot, &subroot);
+            // FSMNode::add_child_cycle_safe(&subroot, &subroot);
+            FSMNode::add_child_to_all_leaves(&subroot, &subroot);
             subroot
         }
         _ => {
@@ -143,8 +126,6 @@ fn handle_node(
             todo!()
         }
     };
-    // println!("cur_root:");
-    // cur_root.borrow().dbg();
     ret
 }
 
