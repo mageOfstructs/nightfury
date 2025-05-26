@@ -332,9 +332,12 @@ impl FSMNode {
     pub fn race_to_leaf(&self) -> Option<Rc<RefCell<FSMNode>>> {
         self.do_stuff_cycle_aware(&mut |visited_nodes, _, child| {
             let mut ret = true;
+            // avoid going back to a node previously visited so do_stuff_cycle_aware doesn't return
+            // a false negative
             for child in &child.borrow().children {
                 if !visited_nodes.contains(&child.borrow().id) {
                     ret = false;
+                    break;
                 }
             }
             ret
