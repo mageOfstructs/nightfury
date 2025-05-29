@@ -113,8 +113,8 @@ fn handle_node(
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
         Node::Repeat(node) => {
-            // FIXME: weird stuff happens when its at the end of a terminal
-            // TODO: see if we really need this Null
+            // need to guarantee this is a null so search_rec won't prematurely stop, e.g. when
+            // cur_root is a Keyword
             let dummy_parent = FSMNode::new_null(Some(&cur_root));
             let subroot = handle_node(grammar, &node, &dummy_parent, terminals);
 
