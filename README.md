@@ -1,6 +1,6 @@
 # Nightfury
 
-- automatic language-independent syntax-insertion engine relying on syntax
+- automatic language-independent autocompletion engine relying on EBNF syntax
 
 ## Project Goal
 
