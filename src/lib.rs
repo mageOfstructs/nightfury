@@ -265,8 +265,6 @@ impl FSMNode {
         self.children.push(Rc::clone(&child));
     }
     pub fn add_child_cycle_safe(this: &Rc<RefCell<FSMNode>>, child: &Rc<RefCell<FSMNode>>) {
-        // println!("accs child:");
-        // child.borrow().dbg();
         while this.borrow().handle_potential_conflict(child) {}
         this.borrow_mut().children.push(Rc::clone(&child));
     }
@@ -307,35 +305,44 @@ impl FSMNode {
             }
         }
     }
-
-    fn get_all_leaves_internal(
-        &self,
-        discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>,
-        visited_nodes: &mut HashSet<usize>,
-    ) {
-        for child in &self.children {
-            // debug_println!("at node {:?}; {}", child.borrow().value, child.borrow().id);
-            if child.borrow().children.is_empty() {
-                // debug_println!("adding node {:?}", child.borrow().value);
-                discovered_leaves.push(child.clone());
-            } else if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
-                child
-                    .borrow()
-                    .get_all_leaves_internal(discovered_leaves, visited_nodes);
-            }
-        }
-    }
     fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>) {
-        self.get_all_leaves_internal(discovered_leaves, &mut HashSet::new());
+        self.do_stuff_cycle_aware(&mut |visited_nodes, _, child| {
+            if child.borrow().children.is_empty() {
+                debug_println!(
+                    "adding node {:?} {}",
+                    child.borrow().value,
+                    child.borrow().short_id()
+                );
+                discovered_leaves.push(child.clone());
+            } else {
+                let mut has_only_cycles = true;
+                for child in &child.borrow().children {
+                    if !visited_nodes.contains(&child.borrow().id) {
+                        has_only_cycles = false;
+                        break;
+                    }
+                }
+                if has_only_cycles {
+                    debug_println!(
+                        "adding node {:?} {}",
+                        child.borrow().value,
+                        child.borrow().short_id()
+                    );
+                    discovered_leaves.push(child.clone());
+                }
+            }
+            false
+        });
     }
     pub fn add_child_to_all_leaves(this: &Rc<RefCell<FSMNode>>, child: &Rc<RefCell<FSMNode>>) {
         let mut leaves = Vec::new();
         this.borrow().get_all_leaves(&mut leaves);
         while let Some(node) = leaves.pop() {
-            if node.borrow().children.is_empty() {
-                FSMNode::add_child_cycle_safe(&node, child);
-            }
+            FSMNode::add_child_cycle_safe(&node, child);
+            // NOTE: hopefully this isn't needed anymore
+            // if node.borrow().children.is_empty() {
+            //     FSMNode::add_child_cycle_safe(&node, child);
+            // }
         }
         if this.borrow().children.is_empty() {
             FSMNode::add_child_cycle_safe(&this, child);
@@ -1036,5 +1043,29 @@ mod tests {
         util_check_str(&root, "owo");
         util_check_str(&root, "owwwwwo");
         util_check_str(&root, "owwwwwu");
+    }
+
+    #[test]
+    fn test_repeat_multiple() {
+        let bnf = r"
+        t1 ::= 't' t2 't';
+        t2 ::= 'oas' | ( 'e' { 'a' 's' } );
+    ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert_eq!("oas", cursor.advance('o').unwrap());
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
+
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert_eq!("e", cursor.advance('e').unwrap());
+        assert_eq!("a", cursor.advance('a').unwrap());
+        assert_eq!("s", cursor.advance('s').unwrap());
+        assert_eq!("a", cursor.advance('a').unwrap());
+        assert_eq!("s", cursor.advance('s').unwrap());
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
     }
 }
