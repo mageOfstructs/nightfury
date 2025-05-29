@@ -41,7 +41,7 @@ Run the program in debug mode. Most of its output is debugging information, whic
   - Note: in certain cases, nightfury can look ahead and insert the next keyword automatically, without you needing to type its `short` sequence
 - `Null`: placeholder node, used to either combine paths or split them
 
-*Sidenote: there is technically another type,* `UserDefined`, *which marks userdefined areas, that are explicitly terminated by a character. It's unused as EBNF doesn't have a way of expressing such a thing right now.*
+*Sidenote: there is technically another type,* `UserDefined`, *which marks userdefined areas that are explicitly terminated by a character. It's unused as EBNF doesn't have a way of expressing such a thing right now.*
 
 The indentation shows you the general flow of the graph. If you see a "Cycle to ID", then that means there is a node link that cannot cleanly be displayed in the tree view (e.g. cycles)
 
