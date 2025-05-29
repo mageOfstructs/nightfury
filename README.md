@@ -35,13 +35,13 @@ cargo run --release # release build, almost no logging (i.e. what you should use
 
 Run the program in debug mode. Most of its output is debugging information, which will be documented *someday*. For now, you just need the section after `FSM:`. This is the FSM nightfury generated from the provided ebnf. It currently supports three types of nodes:
 
-- `Keyword`: some keyword, has two important fields: `expanded` (the actual keyword) and `short` (the character sequence you need to type for it to be inserted)
+- `Keyword`: some keyword, has two important fields: `expanded` (the actual keyword) and `short` (the character sequence you need to type for it to be autocompleted)
   - Note: if nightfury can definitely determine what keyword should be inserted before you finish typing the entire short-sequence
-- `UserDefinedRegex`: section for a userdefined token, e.g. identifiers; your input will have to match the regex for it to be completed
-  - Note: in certain cases, nightfury can look ahead and insert the next keyword automatically
-- `Null`: placeholder node, only used to either a) combine two paths or b) split one path in the FSM
+- `UserDefinedRegex`: section for a userdefined token, e.g. identifiers. Your input has to match the regex for it to be completed
+  - Note: in certain cases, nightfury can look ahead and insert the next keyword automatically, without you needing to type its `short` sequence
+- `Null`: placeholder node, used to either combine paths or split them
 
-*Sidenote: there is technically another type,* `UserDefined`, *which also marks userdefined areas, but ones that are explicitly terminated by a character. It's unused as EBNF doesn't have a way of expressing such a thing right now.*
+*Sidenote: there is technically another type,* `UserDefined`, *which marks userdefined areas, that are explicitly terminated by a character. It's unused as EBNF doesn't have a way of expressing such a thing right now.*
 
 The indentation shows you the general flow of the graph. If you see a "Cycle to ID", then that means there is a node link that cannot cleanly be displayed in the tree view (e.g. cycles)
 
