@@ -8,7 +8,7 @@ use lib::*;
 
 fn main() -> std::io::Result<()> {
     let ebnf = r#"
-        select_statement ::= 'SELECT' select_list 'FROM' table_reference;
+        select_statement ::= 'SELECT' select_list 'FROM' table_reference ';';
         select_list ::= "*" | ( column_name { "," column_name } );
         
         table_reference ::= table_name [ alias ] { "," table_name [ alias ] };
