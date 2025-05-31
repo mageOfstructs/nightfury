@@ -81,6 +81,8 @@ fn handle_node(
                 let tree_bit = handle_node(grammar, &node, &cur_treenode, terminals);
                 debug_println!("Multiple got back:");
                 tree_bit.borrow().dbg();
+                // NOTE: this will only work as long as the other node handlers nicely merge their
+                // diverging branches back into one single Null leaf
                 cur_treenode = tree_bit.borrow().race_to_leaf().unwrap_or(tree_bit.clone());
                 debug_println!("cur_treenode now at: {}", cur_treenode.borrow().short_id());
             });
@@ -103,23 +105,26 @@ fn handle_node(
             let t1 = handle_node(grammar, &n1.to_owned(), &root, terminals);
             let t2 = handle_node(grammar, &n2.to_owned(), &root, terminals);
             let child = FSMNode::new_null(None);
-            FSMNode::add_child_to_all_leaves(&t1, &child);
-            FSMNode::add_child_to_all_leaves(&t2, &child);
+            debug_println!("Alternation dummy child: {}", child.borrow().short_id());
+            FSMNode::add_child_to_all_leaves(&root, &child);
+            debug_println!("Finished alternation:");
+            root.borrow().dbg();
             root
         }
         Node::Group(node) => handle_node(grammar, node, cur_root, terminals),
         Node::Repeat(node) => {
-            // FIXME: doesn't really work if handle_node returns anything more
-            // complex than a single node
-            let subroot = handle_node(grammar, &node, cur_root, terminals);
+            // need to guarantee this is a null so search_rec won't prematurely stop, e.g. when
+            // cur_root is a Keyword
+            let dummy_parent = FSMNode::new_null(Some(&cur_root));
+            let subroot = handle_node(grammar, &node, &dummy_parent, terminals);
 
             let dummy = FSMNode::new_null(None);
+            debug_println!("Repeat dummy child: {}", dummy.borrow().short_id());
             FSMNode::add_child_to_all_leaves(&subroot, &dummy);
             FSMNode::add_child_cycle_safe(&cur_root, &dummy);
 
-            // FSMNode::add_child_cycle_safe(&subroot, &subroot);
-            FSMNode::add_child_to_all_leaves(&subroot, &subroot);
-            subroot
+            FSMNode::add_child_to_all_leaves(&subroot, &dummy_parent);
+            dummy_parent
         }
         _ => {
             eprintln!("Unimplemented: {cur_node:?}");

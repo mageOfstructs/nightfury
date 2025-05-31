@@ -1,21 +1,28 @@
 #![feature(let_chains)]
 
-use std::io::Write;
+use std::{fs::File, io::Read, io::Write, path::Path};
 
 use console::Term;
 use debug_print::debug_println;
 use lib::*;
 
 fn main() -> std::io::Result<()> {
-    let ebnf = r"
-        insert_statement ::= 'INSERT INTO' col ( '(' col { ',' col } ')' )? 'VALUES' '(' col { ',' col } ')';
-        col ::= #'^.*[, ]$';
-    ";
+    let ebnf = r#"
+        select_statement ::= 'SELECT' select_list 'FROM' table_reference ';';
+        select_list ::= "*" | ( column_name { "," column_name } );
+        
+        table_reference ::= table_name [ alias ] { "," table_name [ alias ] };
+        
+        alias ::= "AS" identifier;
+        column_name ::= identifier;
+        table_name ::= identifier;
+        identifier ::= #'[A-Za-z][0-9A-Za-z_]* ';
+    "#;
     // read EBNF from file
-    // let mut complete_ebnf = String::new();
+    // let mut ebnf = String::new();
     // File::open(&Path::new("sql.ebnf"))
     //     .unwrap()
-    //     .read_to_string(&mut complete_ebnf)
+    //     .read_to_string(&mut ebnf)
     //     .unwrap();
     if let Ok(root) = frontend::create_graph_from_ebnf(&ebnf) {
         debug_println!("FSM:");
