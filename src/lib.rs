@@ -248,9 +248,7 @@ impl FSMNode {
         for (childidx, child) in mut_binding.children.clone().iter().enumerate() {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
-                if op(visited_nodes, &mut mut_binding, &child, childidx) {
-                    return Some(child.clone());
-                }
+                // TODO: make this configurable whether to do breadth/depth
                 if (!greedy || child.borrow().is_null())
                     && let Some(child) = FSMNode::util_walk_fsm_cycle_aware_internal(
                         &child,
@@ -260,6 +258,9 @@ impl FSMNode {
                     )
                 {
                     return Some(child);
+                }
+                if op(visited_nodes, &mut mut_binding, &child, childidx) {
+                    return Some(child.clone());
                 }
             }
         }
@@ -1150,6 +1151,24 @@ mod tests {
     fn test_minify() {
         let root = FSMNode::new_null(None);
         let child = FSMNode::new_null(Some(&root));
+        let child = FSMNode::new_keyword_with_parent("asdf".to_string(), child);
+        // minify
+        root.borrow().dbg();
+        FSMNode::minify(&root);
+        root.borrow().dbg();
+        assert_eq!(Null, root.borrow().value);
+        assert_eq!(
+            Keyword(Keyword::new("asdf".to_string(), None)),
+            root.borrow().children[0].borrow().value
+        );
+        assert_eq!(1, root.borrow().children.len())
+    }
+
+    #[test]
+    fn test_minify_multiple() {
+        let root = FSMNode::new_null(None);
+        let child = FSMNode::new_null(Some(&root));
+        let child = FSMNode::new_null(Some(&child));
         let child = FSMNode::new_keyword_with_parent("asdf".to_string(), child);
         // minify
         root.borrow().dbg();
