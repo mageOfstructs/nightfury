@@ -191,6 +191,20 @@ impl FSMNode {
         ret.borrow().dbg();
         ret
     }
+    fn minify(this: &Rc<RefCell<FSMNode>>) {
+        // let mut cycle_translation_table = HashMap::new();
+        this.borrow()
+            .do_stuff_cycle_aware(&mut |visited_nodes, parent, child| {
+                if let Null = parent.value
+                    && let Null = child.borrow().value
+                    // leave cycles alone for now
+                    && !visited_nodes.contains(&child.borrow().id)
+                {
+                    // cycle_translation_table.insert(child.borrow().id, parent);
+                }
+                false
+            });
+    }
     fn do_stuff_cycle_aware(
         &self,
         op: &mut impl FnMut(&mut HashSet<usize>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
@@ -225,6 +239,8 @@ impl FSMNode {
         &self,
         op: &mut impl FnMut(Rc<RefCell<FSMNode>>) -> bool,
     ) -> Option<Rc<RefCell<FSMNode>>> {
+        // TODO: figure out why this breaks things when you start the hashset off with the id of
+        // self
         self.do_stuff_cycle_aware_non_greedy_internal(op, &mut HashSet::new())
     }
     fn do_stuff_cycle_aware_non_greedy_internal(
@@ -1067,5 +1083,19 @@ mod tests {
         assert_eq!("s", cursor.advance('s').unwrap());
         assert_eq!("t", cursor.advance('t').unwrap());
         assert!(cursor.is_done());
+    }
+
+    #[test]
+    fn test_minify() {
+        let root = FSMNode::new_null(None);
+        let child = FSMNode::new_null(Some(&root));
+        let child = FSMNode::new_keyword_with_parent("asdf".to_string(), child);
+        // minify
+        assert_eq!(Null, root.borrow().value);
+        assert_eq!(
+            Keyword(Keyword::new("asdf".to_string(), None)),
+            root.borrow().children[0].borrow().value
+        );
+        assert_eq!(1, root.borrow().children.len())
     }
 }
