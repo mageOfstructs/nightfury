@@ -1068,4 +1068,21 @@ mod tests {
         assert_eq!("t", cursor.advance('t').unwrap());
         assert!(cursor.is_done());
     }
+
+    #[test]
+    fn test_userdefs() {
+        let bnf = r"
+        t1 ::= ( #'[0-9]' 't' ) | ( #'[a-z]' 'e' );
+    ";
+        let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!(None, cursor.advance('1'));
+        assert_eq!("t", cursor.advance('t').unwrap());
+        assert!(cursor.is_done());
+
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!(None, cursor.advance('a'));
+        assert_eq!("e", cursor.advance('e').unwrap());
+        assert!(cursor.is_done());
+    }
 }
