@@ -152,6 +152,7 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<FSMNode>>, String
             );
             // sanity op, is_done() won't cancel preemptively
             FSMNode::add_child_to_all_leaves(&root, &FSMNode::new_null(None));
+            FSMNode::minify(&root);
             for (name, term) in terminals.iter() {
                 println!("Term {}", name);
                 term.0.borrow().dbg();
