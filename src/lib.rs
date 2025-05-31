@@ -577,12 +577,13 @@ impl FSMCursor {
         self.input_buf.clear();
     }
     fn search_for_userdefs(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
-        treenode
-            .borrow()
-            .do_stuff_cycle_aware_non_greedy(&mut |child| match child.borrow().value {
-                UserDefined { .. } | UserDefinedRegex { .. } => true,
+        treenode.borrow().do_stuff_cycle_aware_non_greedy(
+            &mut |child| match &child.borrow().value {
+                UserDefined { .. } => true,
+                UserDefinedRegex(regex) if regex.partial_match(&self.input_buf) => true,
                 _ => false,
-            })
+            },
+        )
     }
     pub fn search_rec(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
         self.search_rec_internal(treenode, false)
