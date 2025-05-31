@@ -1181,4 +1181,24 @@ mod tests {
         );
         assert_eq!(1, root.borrow().children.len())
     }
+
+    #[test]
+    fn test_minify_cycles() {
+        let root = FSMNode::new_null(None);
+        let child = FSMNode::new_null(Some(&root));
+        let child2 = FSMNode::new_null(Some(&child));
+        let child = FSMNode::new_keyword_with_parent("asdf".to_string(), child2.clone());
+        FSMNode::add_child_cycle_safe(&child, &child2);
+        // minify
+        root.borrow().dbg();
+        FSMNode::minify(&root);
+        root.borrow().dbg();
+        assert!(false);
+        assert_eq!(Null, root.borrow().value);
+        assert_eq!(
+            Keyword(Keyword::new("asdf".to_string(), None)),
+            root.borrow().children[0].borrow().value
+        );
+        assert_eq!(1, root.borrow().children.len())
+    }
 }
