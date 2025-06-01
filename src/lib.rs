@@ -207,7 +207,8 @@ impl FSMNode {
                     for child in &child.borrow().children {
                         parent.borrow_mut().children.push(child.clone());
                     }
-                    parent.borrow_mut().children.remove(childidx);
+                    parent.borrow_mut().children.remove(*childidx as usize);
+                    *childidx -= 1;
                 }
                 debug_println!("{}", child.try_borrow_mut().is_err());
                 let children = child.borrow().children.clone();
@@ -242,7 +243,7 @@ impl FSMNode {
             &mut HashSet<usize>,
             &Rc<RefCell<FSMNode>>,
             &Rc<RefCell<FSMNode>>,
-            usize,
+            &mut isize,
         ) -> bool,
         greedy: bool,
     ) -> Option<Rc<RefCell<FSMNode>>> {
@@ -256,7 +257,7 @@ impl FSMNode {
             &mut HashSet<usize>,
             &Rc<RefCell<FSMNode>>,
             &Rc<RefCell<FSMNode>>,
-            usize,
+            &mut isize,
         ) -> bool,
         visited_nodes: &mut HashSet<usize>,
         greedy: bool,
@@ -264,6 +265,7 @@ impl FSMNode {
         debug_println!("{}", this.borrow().short_id());
         // don't like this
         let children = this.borrow().children.clone();
+        let mut cIdx = 0;
         for (childidx, child) in children.iter().enumerate() {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
@@ -279,10 +281,11 @@ impl FSMNode {
                     return Some(child);
                 }
                 debug_println!("this borrowed_mutably: {}", this.try_borrow_mut().is_err());
-                if op(visited_nodes, &this, &child, childidx) {
+                if op(visited_nodes, &this, &child, &mut cIdx) {
                     return Some(child.clone());
                 }
             }
+            cIdx += 1;
         }
         None
     }
