@@ -204,10 +204,11 @@ impl FSMNode {
                 // && !visited_nodes.contains(&child.borrow().id)
                 {
                     cycle_translation_table.insert(child.borrow().id, parent.clone());
+                    parent.borrow_mut().children.remove(*childidx as usize);
                     for child in &child.borrow().children {
                         parent.borrow_mut().children.push(child.clone());
                     }
-                    parent.borrow_mut().children.remove(*childidx as usize);
+                    child.borrow_mut().children.clear();
                     *childidx -= 1;
                 }
                 false
@@ -253,8 +254,8 @@ impl FSMNode {
         debug_println!("{}", this.borrow().short_id());
         // don't like this
         let children = this.borrow().children.clone();
-        let mut cIdx = 0;
-        for (childidx, child) in children.iter().enumerate() {
+        let mut c_idx = 0;
+        for child in children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
                 // TODO: make this configurable whether to do breadth/depth
@@ -269,11 +270,11 @@ impl FSMNode {
                     return Some(child);
                 }
                 debug_println!("this borrowed_mutably: {}", this.try_borrow_mut().is_err());
-                if op(visited_nodes, &this, &child, &mut cIdx) {
+                if op(visited_nodes, &this, &child, &mut c_idx) {
                     return Some(child.clone());
                 }
             }
-            cIdx += 1;
+            c_idx += 1;
         }
         None
     }
