@@ -210,27 +210,15 @@ impl FSMNode {
                     parent.borrow_mut().children.remove(*childidx as usize);
                     *childidx -= 1;
                 }
-                debug_println!("{}", child.try_borrow_mut().is_err());
-                let children = child.borrow().children.clone();
-                debug_println!("{}", child.try_borrow_mut().is_err());
-                // FSMNode::util_walk_fsm_cycle_aware(
-                //     child,
-                //     &mut |_, _, _, child| {
-                //         // asd
-                //         false
-                //     },
-                //     true,
-                // );
-                for child_to_replace in children
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, c)| cycle_translation_table.contains_key(&c.borrow().id))
-                    .map(|(i, c)| (i, cycle_translation_table.get(&c.borrow().id).unwrap()))
-                {
-                    debug_println!("{}", child.try_borrow_mut().is_err());
-                    let new_child = Rc::new(RefCell::new(child_to_replace.1.borrow().clone()));
-                    debug_println!("{}", child.try_borrow_mut().is_err());
-                    child.borrow_mut().children[child_to_replace.0] = new_child;
+                false
+            },
+            true,
+        );
+        FSMNode::util_walk_fsm_cycle_aware(
+            this,
+            &mut |_, parent, child, childidx| {
+                if let Some(new_child) = cycle_translation_table.get(&child.borrow().id) {
+                    parent.borrow_mut().children[*childidx as usize] = new_child.clone();
                 }
                 false
             },
