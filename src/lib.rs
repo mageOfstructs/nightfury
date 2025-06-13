@@ -230,6 +230,7 @@ impl FSMNode {
         FSMNode::util_walk_fsm_cycle_aware(
             this,
             &mut |_, parent, child, childidx| {
+                // TODO: figure out why the parent check needs to be here
                 if parent.borrow().is_null()
                     && child.borrow().is_null()
                     && parent.borrow().children.len() == 1
@@ -838,7 +839,7 @@ impl FSMCursor {
                     self.input_buf.push(input);
                     let next_node = self.search_rec_internal(&binding, true);
                     if next_node.is_none() {
-                        println!("No node found");
+                        debug_println!("No node found");
                         self.input_buf.clear();
                         return Some(input.to_string());
                     }
