@@ -1,4 +1,5 @@
 #![feature(let_chains)]
+#![feature(if_let_guard)]
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -134,9 +135,10 @@ pub struct NodeValue {
     pub is_done: bool,
 }
 
+type NodeId = usize;
 #[derive(Debug, Clone, PartialEq)]
 pub struct FSMNode {
-    id: usize,
+    id: NodeId,
     is_done: bool,
     value: NodeType,
     parent: Option<Rc<RefCell<FSMNode>>>,
@@ -156,6 +158,9 @@ impl Default for FSMNode {
 }
 
 impl FSMNode {
+    pub fn is_null(&self) -> bool {
+        if let Null = self.value { true } else { false }
+    }
     fn deep_clone_internal(
         stub: &Rc<RefCell<Self>>,
         old: &FSMNode,
@@ -191,6 +196,140 @@ impl FSMNode {
         ret.borrow().dbg();
         ret
     }
+    fn has_direct_child(&self, id: usize) -> bool {
+        self.children.iter().find(|c| c.borrow().id == id).is_some()
+    }
+    pub fn node_cnt(this: &Rc<RefCell<FSMNode>>) -> usize {
+        let mut ret = 1; // one root node
+        FSMNode::util_walk_fsm_cycle_aware(
+            this,
+            &mut |_, parent, _, _| {
+                ret += parent.borrow().children.len();
+                false
+            },
+            true,
+        );
+        ret
+    }
+    fn get_direct_child_dups(&self) -> Vec<usize> {
+        let mut ids = HashSet::new();
+        let mut ret = Vec::new();
+        self.children.iter().enumerate().for_each(|(i, c)| {
+            if ids.contains(&c.borrow().id) {
+                ret.push(i);
+            } else {
+                ids.insert(c.borrow().id);
+            }
+        });
+        ret
+    }
+    fn minify(this: &Rc<RefCell<FSMNode>>) {
+        debug_println!("before minify:");
+        this.borrow().dbg();
+        let mut cycle_translation_table = HashMap::new();
+        FSMNode::util_walk_fsm_cycle_aware(
+            this,
+            &mut |_, parent, child, childidx| {
+                // TODO: figure out why the parent check needs to be here
+                if parent.borrow().is_null()
+                    && child.borrow().is_null()
+                    && parent.borrow().children.len() == 1
+                {
+                    cycle_translation_table.insert(child.borrow().id, parent.clone());
+                    parent.borrow_mut().children.remove(*childidx as usize);
+                    for child in &child.borrow().children {
+                        debug_println!("CID: {}", child.borrow().short_id());
+                        if child.borrow().id == parent.borrow().id
+                            || parent.borrow().has_direct_child(child.borrow().id)
+                        {
+                            continue;
+                        }
+                        parent.borrow_mut().children.push(child.clone());
+                    }
+                    child.borrow_mut().children.clear();
+                    *childidx -= 1;
+                }
+                let pborrow = parent.borrow();
+                let dup_idxs = pborrow.get_direct_child_dups();
+                drop(pborrow);
+                dup_idxs.iter().for_each(|ci| {
+                    parent.borrow_mut().children.remove(*ci);
+                });
+                false
+            },
+            true,
+        );
+        // fix any broken pointers the last op may have created
+        FSMNode::util_walk_fsm_cycle_aware(
+            this,
+            &mut |_, parent, child, childidx| {
+                if let Some(new_child) = cycle_translation_table.get(&child.borrow().id) {
+                    if new_child.borrow().id == parent.borrow().id
+                        || parent.borrow().has_direct_child(new_child.borrow().id)
+                    {
+                        parent.borrow_mut().children.remove(*childidx as usize);
+                        return false;
+                    }
+                    parent.borrow_mut().children[*childidx as usize] = new_child.clone();
+                }
+                false
+            },
+            true,
+        );
+        debug_println!("after minify:");
+        this.borrow().dbg();
+    }
+    fn util_walk_fsm_cycle_aware(
+        this: &Rc<RefCell<FSMNode>>,
+        op: &mut impl FnMut(
+            &mut HashSet<usize>,
+            &Rc<RefCell<FSMNode>>,
+            &Rc<RefCell<FSMNode>>,
+            &mut isize,
+        ) -> bool,
+        greedy: bool,
+    ) -> Option<Rc<RefCell<FSMNode>>> {
+        let mut visisted_nodes = HashSet::new();
+        visisted_nodes.insert(this.borrow().id);
+        FSMNode::util_walk_fsm_cycle_aware_internal(this, op, &mut visisted_nodes, greedy)
+    }
+    fn util_walk_fsm_cycle_aware_internal(
+        this: &Rc<RefCell<FSMNode>>,
+        op: &mut impl FnMut(
+            &mut HashSet<usize>,
+            &Rc<RefCell<FSMNode>>,
+            &Rc<RefCell<FSMNode>>,
+            &mut isize,
+        ) -> bool,
+        visited_nodes: &mut HashSet<usize>,
+        greedy: bool,
+    ) -> Option<Rc<RefCell<FSMNode>>> {
+        // don't like this
+        let children = this.borrow().children.clone();
+        let mut c_idx = 0;
+        for child in children.iter() {
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                // TODO: make this configurable whether to do breadth/depth
+                if (greedy || child.borrow().is_null())
+                    && let Some(child) = FSMNode::util_walk_fsm_cycle_aware_internal(
+                        &child,
+                        op,
+                        visited_nodes,
+                        greedy,
+                    )
+                {
+                    return Some(child);
+                }
+                if op(visited_nodes, &this, &child, &mut c_idx) {
+                    return Some(child.clone());
+                }
+            }
+            c_idx += 1;
+        }
+        None
+    }
+    #[deprecated]
     fn do_stuff_cycle_aware(
         &self,
         op: &mut impl FnMut(&mut HashSet<usize>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
@@ -225,6 +364,8 @@ impl FSMNode {
         &self,
         op: &mut impl FnMut(Rc<RefCell<FSMNode>>) -> bool,
     ) -> Option<Rc<RefCell<FSMNode>>> {
+        // TODO: figure out why this breaks things when you start the hashset off with the id of
+        // self
         self.do_stuff_cycle_aware_non_greedy_internal(op, &mut HashSet::new())
     }
     fn do_stuff_cycle_aware_non_greedy_internal(
@@ -307,6 +448,13 @@ impl FSMNode {
     }
     fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>) {
         self.do_stuff_cycle_aware(&mut |visited_nodes, _, child| {
+            if discovered_leaves
+                .iter()
+                .find(|dl| dl.borrow().id == child.borrow().id)
+                .is_some()
+            {
+                return false;
+            }
             if child.borrow().children.is_empty() {
                 debug_println!(
                     "adding node {:?} {}",
@@ -692,7 +840,7 @@ impl FSMCursor {
                     self.input_buf.push(input);
                     let next_node = self.search_rec_internal(&binding, true);
                     if next_node.is_none() {
-                        println!("No node found");
+                        debug_println!("No node found");
                         self.input_buf.clear();
                         return Some(input.to_string());
                     }
@@ -980,6 +1128,7 @@ mod tests {
         col ::= #'^.*[, ]$';
     ";
         let root = frontend::create_graph_from_ebnf(bnf).unwrap();
+        root.borrow().dbg();
         let mut cursor = FSMCursor::new(&root);
         assert_eq!("SELECT", cursor.advance('S').unwrap());
         assert_eq!(None, cursor.advance('a'));
@@ -1085,5 +1234,56 @@ mod tests {
         assert_eq!(None, cursor.advance('a'));
         assert_eq!("e", cursor.advance('e').unwrap());
         assert!(cursor.is_done());
+    }
+    fn test_minify() {
+        let root = FSMNode::new_null(None);
+        let child = FSMNode::new_null(Some(&root));
+        let child = FSMNode::new_keyword_with_parent("asdf".to_string(), child);
+        // minify
+        root.borrow().dbg();
+        FSMNode::minify(&root);
+        root.borrow().dbg();
+        assert_eq!(Null, root.borrow().value);
+        assert_eq!(
+            Keyword(Keyword::new("asdf".to_string(), None)),
+            root.borrow().children[0].borrow().value
+        );
+        assert_eq!(1, root.borrow().children.len())
+    }
+
+    #[test]
+    fn test_minify_multiple() {
+        let root = FSMNode::new_null(None);
+        let child = FSMNode::new_null(Some(&root));
+        let child = FSMNode::new_null(Some(&child));
+        let child = FSMNode::new_keyword_with_parent("asdf".to_string(), child);
+        // minify
+        root.borrow().dbg();
+        FSMNode::minify(&root);
+        root.borrow().dbg();
+        assert_eq!(Null, root.borrow().value);
+        assert_eq!(
+            Keyword(Keyword::new("asdf".to_string(), None)),
+            root.borrow().children[0].borrow().value
+        );
+        assert_eq!(1, root.borrow().children.len())
+    }
+
+    #[test]
+    fn test_minify_cycles() {
+        let root = FSMNode::new_null(None);
+        let child = FSMNode::new_null(Some(&root));
+        let child2 = FSMNode::new_null(Some(&child));
+        let child = FSMNode::new_keyword_with_parent("asdf".to_string(), child2.clone());
+        FSMNode::add_child_cycle_safe(&child, &child2);
+        FSMNode::minify(&root);
+
+        assert_eq!(Null, root.borrow().value);
+        assert_eq!(
+            Keyword(Keyword::new("asdf".to_string(), None)),
+            root.borrow().children[0].borrow().value
+        );
+        assert_eq!(1, root.borrow().children.len());
+        assert_eq!(1, root.borrow().children[0].borrow().children.len());
     }
 }

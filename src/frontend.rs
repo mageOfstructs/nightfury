@@ -40,10 +40,6 @@ fn handle_node(
                     TerminalState::Created => term.0.borrow().deep_clone(),
                 };
                 println!("linking back to {}", term_clone.borrow().short_id());
-                // println!("cur_root:");
-                // cur_root.borrow().dbg();
-                // println!("term:");
-                // term_clone.borrow().dbg();
                 FSMNode::add_child_cycle_safe(cur_root, &term_clone);
                 println!("after add:");
                 cur_root.borrow().dbg();
@@ -121,6 +117,7 @@ fn handle_node(
             let dummy = FSMNode::new_null(None);
             debug_println!("Repeat dummy child: {}", dummy.borrow().short_id());
             FSMNode::add_child_to_all_leaves(&subroot, &dummy);
+            // must have the option to skip it entirely
             FSMNode::add_child_cycle_safe(&cur_root, &dummy);
 
             FSMNode::add_child_to_all_leaves(&subroot, &dummy_parent);
@@ -152,10 +149,12 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<FSMNode>>, String
             );
             // sanity op, is_done() won't cancel preemptively
             FSMNode::add_child_to_all_leaves(&root, &FSMNode::new_null(None));
-            for (name, term) in terminals.iter() {
-                println!("Term {}", name);
-                term.0.borrow().dbg();
-            }
+            FSMNode::minify(&root);
+            debug_println!("Total node cnt: {}", FSMNode::node_cnt(&root));
+            // for (name, term) in terminals.iter() {
+            //     println!("Term {}", name);
+            //     term.0.borrow().dbg();
+            // }
             Ok(root)
         }
         Err(err) => Err(err.to_string()),
