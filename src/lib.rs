@@ -1,4 +1,5 @@
 #![feature(let_chains)]
+#![feature(if_let_guard)]
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -134,9 +135,10 @@ pub struct NodeValue {
     pub is_done: bool,
 }
 
+type NodeId = usize;
 #[derive(Debug, Clone, PartialEq)]
 pub struct FSMNode {
-    id: usize,
+    id: NodeId,
     is_done: bool,
     value: NodeType,
     parent: Option<Rc<RefCell<FSMNode>>>,
@@ -194,18 +196,29 @@ impl FSMNode {
         ret.borrow().dbg();
         ret
     }
+    fn has_direct_child(&self, id: usize) -> bool {
+        self.children.iter().find(|c| c.borrow().id == id).is_some()
+    }
     fn minify(this: &Rc<RefCell<FSMNode>>) {
+        debug_println!("before minify:");
+        this.borrow().dbg();
         let mut cycle_translation_table = HashMap::new();
         FSMNode::util_walk_fsm_cycle_aware(
             this,
-            &mut |visited_nodes, parent, child, childidx| {
-                if parent.borrow().is_null() && child.borrow().is_null()
-                // leave cycles alone for now
-                // && !visited_nodes.contains(&child.borrow().id)
+            &mut |_, parent, child, childidx| {
+                if parent.borrow().is_null()
+                    && child.borrow().is_null()
+                    && parent.borrow().children.len() == 1
                 {
                     cycle_translation_table.insert(child.borrow().id, parent.clone());
                     parent.borrow_mut().children.remove(*childidx as usize);
                     for child in &child.borrow().children {
+                        debug_println!("CID: {}", child.borrow().short_id());
+                        if child.borrow().id == parent.borrow().id
+                            || parent.borrow().has_direct_child(child.borrow().id)
+                        {
+                            continue;
+                        }
                         parent.borrow_mut().children.push(child.clone());
                     }
                     child.borrow_mut().children.clear();
@@ -215,16 +228,25 @@ impl FSMNode {
             },
             true,
         );
+        // fix any broken pointers the last op may have created
         FSMNode::util_walk_fsm_cycle_aware(
             this,
             &mut |_, parent, child, childidx| {
                 if let Some(new_child) = cycle_translation_table.get(&child.borrow().id) {
+                    if new_child.borrow().id == parent.borrow().id
+                        || parent.borrow().has_direct_child(new_child.borrow().id)
+                    {
+                        parent.borrow_mut().children.remove(*childidx as usize);
+                        return false;
+                    }
                     parent.borrow_mut().children[*childidx as usize] = new_child.clone();
                 }
                 false
             },
             true,
         );
+        debug_println!("after minify:");
+        this.borrow().dbg();
     }
     fn util_walk_fsm_cycle_aware(
         this: &Rc<RefCell<FSMNode>>,
@@ -251,7 +273,6 @@ impl FSMNode {
         visited_nodes: &mut HashSet<usize>,
         greedy: bool,
     ) -> Option<Rc<RefCell<FSMNode>>> {
-        debug_println!("{}", this.borrow().short_id());
         // don't like this
         let children = this.borrow().children.clone();
         let mut c_idx = 0;
