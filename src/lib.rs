@@ -290,7 +290,6 @@ impl FSMNode {
                 {
                     return Some(child);
                 }
-                debug_println!("this borrowed_mutably: {}", this.try_borrow_mut().is_err());
                 if op(visited_nodes, &this, &child, &mut c_idx) {
                     return Some(child.clone());
                 }
@@ -418,6 +417,13 @@ impl FSMNode {
     }
     fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>) {
         self.do_stuff_cycle_aware(&mut |visited_nodes, _, child| {
+            if discovered_leaves
+                .iter()
+                .find(|dl| dl.borrow().id == child.borrow().id)
+                .is_some()
+            {
+                return false;
+            }
             if child.borrow().children.is_empty() {
                 debug_println!(
                     "adding node {:?} {}",
