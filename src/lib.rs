@@ -280,7 +280,7 @@ impl FSMNode {
             if !visited_nodes.contains(&child.borrow().id) {
                 visited_nodes.insert(child.borrow().id);
                 // TODO: make this configurable whether to do breadth/depth
-                if (!greedy || child.borrow().is_null())
+                if (greedy || child.borrow().is_null())
                     && let Some(child) = FSMNode::util_walk_fsm_cycle_aware_internal(
                         &child,
                         op,
