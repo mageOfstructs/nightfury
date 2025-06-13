@@ -199,6 +199,30 @@ impl FSMNode {
     fn has_direct_child(&self, id: usize) -> bool {
         self.children.iter().find(|c| c.borrow().id == id).is_some()
     }
+    pub fn node_cnt(this: &Rc<RefCell<FSMNode>>) -> usize {
+        let mut ret = 1; // one root node
+        FSMNode::util_walk_fsm_cycle_aware(
+            this,
+            &mut |_, parent, _, _| {
+                ret += parent.borrow().children.len();
+                false
+            },
+            true,
+        );
+        ret
+    }
+    fn get_direct_child_dups(&self) -> Vec<usize> {
+        let mut ids = HashSet::new();
+        let mut ret = Vec::new();
+        self.children.iter().enumerate().for_each(|(i, c)| {
+            if ids.contains(&c.borrow().id) {
+                ret.push(i);
+            } else {
+                ids.insert(c.borrow().id);
+            }
+        });
+        ret
+    }
     fn minify(this: &Rc<RefCell<FSMNode>>) {
         debug_println!("before minify:");
         this.borrow().dbg();
@@ -224,6 +248,12 @@ impl FSMNode {
                     child.borrow_mut().children.clear();
                     *childidx -= 1;
                 }
+                let pborrow = parent.borrow();
+                let dup_idxs = pborrow.get_direct_child_dups();
+                drop(pborrow);
+                dup_idxs.iter().for_each(|ci| {
+                    parent.borrow_mut().children.remove(*ci);
+                });
                 false
             },
             true,
