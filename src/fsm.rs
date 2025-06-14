@@ -1,13 +1,12 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 use super::get_id;
 use crate::NameShortener;
 
 type FSMNodeWrapper = Rc<RefCell<FSMNode>>;
-trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut usize) -> bool;
+trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut isize) -> bool;
 trait CycleAwareOp<T>
 where
     T: FSMOp,
@@ -216,8 +215,7 @@ impl FSMNode {
     }
     pub fn node_cnt(this: &Rc<RefCell<FSMNode>>) -> usize {
         let mut ret = 1; // one root node
-        FSMNode::util_walk_fsm_cycle_aware(
-            this,
+        this.walk_fsm_depth(
             &mut |_, parent, _, _| {
                 ret += parent.borrow().children.len();
                 false
@@ -242,8 +240,7 @@ impl FSMNode {
         debug_println!("before minify:");
         this.borrow().dbg();
         let mut cycle_translation_table = HashMap::new();
-        FSMNode::util_walk_fsm_cycle_aware(
-            this,
+        this.walk_fsm_depth(
             &mut |_, parent, child, childidx| {
                 // TODO: figure out why the parent check needs to be here
                 if parent.borrow().is_null()
@@ -275,8 +272,7 @@ impl FSMNode {
             true,
         );
         // fix any broken pointers the last op may have created
-        FSMNode::util_walk_fsm_cycle_aware(
-            this,
+        this.walk_fsm_depth(
             &mut |_, parent, child, childidx| {
                 if let Some(new_child) = cycle_translation_table.get(&child.borrow().id) {
                     if new_child.borrow().id == parent.borrow().id
@@ -294,6 +290,7 @@ impl FSMNode {
         debug_println!("after minify:");
         this.borrow().dbg();
     }
+    #[deprecated]
     fn util_walk_fsm_cycle_aware(
         this: &Rc<RefCell<FSMNode>>,
         op: &mut impl FnMut(
