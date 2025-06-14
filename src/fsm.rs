@@ -1,9 +1,81 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 use super::get_id;
 use crate::NameShortener;
+
+type FSMNodeWrapper = Rc<RefCell<FSMNode>>;
+trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut usize) -> bool;
+trait CycleAwareOp<T>
+where
+    T: FSMOp,
+{
+    fn walk_fsm(&self, op: &mut T, greedy: bool, depth_search: bool) -> Option<FSMNodeWrapper>;
+    fn walk_fsm_internal(
+        &self,
+        op: &mut T,
+        greedy: bool,
+        depth_search: bool,
+        visited_nodes: &mut HashSet<NodeId>,
+    ) -> Option<FSMNodeWrapper>;
+    fn walk_fsm_breadth(&self, op: &mut T, greedy: bool) -> Option<FSMNodeWrapper> {
+        self.walk_fsm(op, greedy, false)
+    }
+    fn walk_fsm_depth(&self, op: &mut T, greedy: bool) -> Option<FSMNodeWrapper> {
+        self.walk_fsm(op, greedy, true)
+    }
+}
+
+impl<T> CycleAwareOp<T> for FSMNodeWrapper
+where
+    T: FSMOp,
+{
+    fn walk_fsm_internal(
+        &self,
+        op: &mut T,
+        greedy: bool,
+        depth_search: bool,
+        visited_nodes: &mut HashSet<NodeId>,
+    ) -> Option<FSMNodeWrapper> {
+        let children = self.borrow().children.clone();
+        let mut c_idx = 0;
+        for child in children.iter() {
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                if depth_search {
+                    if (greedy || child.borrow().is_null())
+                        && let Some(child) =
+                            child.walk_fsm_internal(op, greedy, depth_search, visited_nodes)
+                    {
+                        return Some(child);
+                    }
+                }
+                if op(visited_nodes, self, child, &mut c_idx) {
+                    return Some(child.clone());
+                }
+            }
+            c_idx += 1;
+        }
+        if !depth_search {
+            for child in children.iter() {
+                if (greedy || child.borrow().is_null())
+                    && let Some(child) =
+                        child.walk_fsm_internal(op, greedy, depth_search, visited_nodes)
+                {
+                    return Some(child);
+                }
+            }
+        }
+        None
+    }
+    fn walk_fsm(&self, op: &mut T, greedy: bool, depth_search: bool) -> Option<FSMNodeWrapper> {
+        let mut visisted_nodes = HashSet::new();
+        visisted_nodes.insert(self.borrow().id);
+        self.walk_fsm_internal(op, greedy, depth_search, &mut visisted_nodes)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Keyword {
