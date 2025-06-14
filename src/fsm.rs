@@ -8,7 +8,7 @@ use crate::NameShortener;
 type FSMNodeWrapper = Rc<RefCell<FSMNode>>;
 trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut isize) -> bool;
 trait FSMUnsafe = Fn(&mut HashSet<NodeId>, &FSMNode, &FSMNode, &mut isize) -> bool;
-trait CycleAwareOp<T> {
+pub trait CycleAwareOp<T> {
     fn walk_fsm(&self, op: &mut T, greedy: bool, depth_search: bool) -> Option<FSMNodeWrapper>;
     fn walk_fsm_internal(
         &self,

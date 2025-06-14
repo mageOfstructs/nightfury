@@ -5,8 +5,8 @@
 
 use debug_print::debug_println;
 pub use fsm::FSMNode;
-use fsm::Keyword;
 use fsm::NodeType::{self, *};
+use fsm::{CycleAwareOp, Keyword};
 use regex::Regex;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -114,12 +114,13 @@ impl FSMCursor {
         self.input_buf.clear();
     }
     fn search_for_userdefs(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
-        treenode.borrow().do_stuff_cycle_aware_non_greedy(
-            &mut |child| match &child.borrow().value {
+        treenode.borrow().walk_fsm_breadth(
+            &mut |_, _, child, _| match &child.value {
                 UserDefined { .. } => true,
                 UserDefinedRegex(regex) if regex.partial_match(&self.input_buf) => true,
                 _ => false,
             },
+            false,
         )
     }
     pub fn search_rec(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
@@ -139,6 +140,7 @@ impl FSMCursor {
         let mut potential_matches = 0;
         let mut visited_keywords = 0;
         let mut last_keyword = None;
+        // TODO: this one relies on buggy behavior from the old function!
         treenode
             .borrow()
             .do_stuff_cycle_aware_non_greedy(&mut |child| {
