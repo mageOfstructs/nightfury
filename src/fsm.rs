@@ -7,10 +7,8 @@ use crate::NameShortener;
 
 type FSMNodeWrapper = Rc<RefCell<FSMNode>>;
 trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut isize) -> bool;
-trait CycleAwareOp<T>
-where
-    T: FSMOp,
-{
+trait FSMUnsafe = Fn(&mut HashSet<NodeId>, &FSMNode, &FSMNode, &mut isize) -> bool;
+trait CycleAwareOp<T> {
     fn walk_fsm(&self, op: &mut T, greedy: bool, depth_search: bool) -> Option<FSMNodeWrapper>;
     fn walk_fsm_internal(
         &self,
@@ -24,6 +22,62 @@ where
     }
     fn walk_fsm_depth(&self, op: &mut T, greedy: bool) -> Option<FSMNodeWrapper> {
         self.walk_fsm(op, greedy, true)
+    }
+}
+
+// TODO: refactor
+impl<T> CycleAwareOp<T> for FSMNode
+where
+    T: FSMUnsafe,
+{
+    fn walk_fsm_internal(
+        &self,
+        op: &mut T,
+        greedy: bool,
+        depth_search: bool,
+        visited_nodes: &mut HashSet<NodeId>,
+    ) -> Option<FSMNodeWrapper> {
+        let children = self.children.clone();
+        let mut c_idx = 0;
+        for child in children.iter() {
+            if !visited_nodes.contains(&child.borrow().id) {
+                visited_nodes.insert(child.borrow().id);
+                if depth_search {
+                    if (greedy || child.borrow().is_null())
+                        && let Some(child) = child.borrow().walk_fsm_internal(
+                            op,
+                            greedy,
+                            depth_search,
+                            visited_nodes,
+                        )
+                    {
+                        return Some(child);
+                    }
+                }
+                if op(visited_nodes, self, &child.borrow(), &mut c_idx) {
+                    return Some(child.clone());
+                }
+            }
+            c_idx += 1;
+        }
+        if !depth_search {
+            for child in children.iter() {
+                if (greedy || child.borrow().is_null())
+                    && let Some(child) =
+                        child
+                            .borrow()
+                            .walk_fsm_internal(op, greedy, depth_search, visited_nodes)
+                {
+                    return Some(child);
+                }
+            }
+        }
+        None
+    }
+    fn walk_fsm(&self, op: &mut T, greedy: bool, depth_search: bool) -> Option<FSMNodeWrapper> {
+        let mut visisted_nodes = HashSet::new();
+        visisted_nodes.insert(self.id);
+        self.walk_fsm_internal(op, greedy, depth_search, &mut visisted_nodes)
     }
 }
 
@@ -354,10 +408,13 @@ impl FSMNode {
         None
     }
     pub fn has_useful_children(&self) -> bool {
-        self.do_stuff_cycle_aware(&mut |_, _, c| match c.borrow().value {
-            Null => false,
-            _ => true,
-        })
+        self.walk_fsm_breadth(
+            &mut |_, _, c, _| match c.value {
+                Null => false,
+                _ => true,
+            },
+            false,
+        )
         .is_some()
     }
 
@@ -455,18 +512,21 @@ impl FSMNode {
     }
 
     pub fn race_to_leaf(&self) -> Option<Rc<RefCell<FSMNode>>> {
-        self.do_stuff_cycle_aware(&mut |visited_nodes, _, child| {
-            let mut ret = true;
-            // avoid going back to a node previously visited so do_stuff_cycle_aware doesn't return
-            // a false negative
-            for child in &child.borrow().children {
-                if !visited_nodes.contains(&child.borrow().id) {
-                    ret = false;
-                    break;
+        self.walk_fsm_depth(
+            &mut |visited_nodes, _, child, _| {
+                let mut ret = true;
+                // avoid going back to a node previously visited so do_stuff_cycle_aware doesn't return
+                // a false negative
+                for child in &child.children {
+                    if !visited_nodes.contains(&child.borrow().id) {
+                        ret = false;
+                        break;
+                    }
                 }
-            }
-            ret
-        })
+                ret
+            },
+            true,
+        )
     }
     pub fn dbg(&self) {
         #[cfg(debug_assertions)]
@@ -548,15 +608,18 @@ impl FSMNode {
     }
 
     fn get_conflicting_node(&self, short: &str) -> Option<Rc<RefCell<FSMNode>>> {
-        self.do_stuff_cycle_aware_non_greedy(&mut |child: Rc<RefCell<FSMNode>>| {
-            println!("awa?");
-            match &child.borrow().value {
-                Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
-                    return true;
+        self.walk_fsm_breadth(
+            &mut |_, _, child, _| {
+                println!("awa?");
+                match &child.value {
+                    Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
+                        return true;
+                    }
+                    _ => false,
                 }
-                _ => false,
-            }
-        })
+            },
+            false,
+        )
     }
     fn handle_potential_conflict_internal(&self, child: &Rc<RefCell<FSMNode>>) -> bool {
         let child_borrow = child.borrow();
