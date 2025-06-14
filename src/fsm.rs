@@ -71,12 +71,6 @@ use NodeType::*;
 use debug_print::debug_println;
 use regex::Regex;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct NodeValue {
-    pub ntype: NodeType,
-    pub is_done: bool,
-}
-
 type NodeId = usize;
 #[derive(Debug, Clone, PartialEq)]
 pub struct FSMNode {
