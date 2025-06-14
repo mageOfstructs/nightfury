@@ -290,57 +290,7 @@ impl FSMNode {
         debug_println!("after minify:");
         this.borrow().dbg();
     }
-    #[deprecated]
-    fn util_walk_fsm_cycle_aware(
-        this: &Rc<RefCell<FSMNode>>,
-        op: &mut impl FnMut(
-            &mut HashSet<usize>,
-            &Rc<RefCell<FSMNode>>,
-            &Rc<RefCell<FSMNode>>,
-            &mut isize,
-        ) -> bool,
-        greedy: bool,
-    ) -> Option<Rc<RefCell<FSMNode>>> {
-        let mut visisted_nodes = HashSet::new();
-        visisted_nodes.insert(this.borrow().id);
-        FSMNode::util_walk_fsm_cycle_aware_internal(this, op, &mut visisted_nodes, greedy)
-    }
-    fn util_walk_fsm_cycle_aware_internal(
-        this: &Rc<RefCell<FSMNode>>,
-        op: &mut impl FnMut(
-            &mut HashSet<usize>,
-            &Rc<RefCell<FSMNode>>,
-            &Rc<RefCell<FSMNode>>,
-            &mut isize,
-        ) -> bool,
-        visited_nodes: &mut HashSet<usize>,
-        greedy: bool,
-    ) -> Option<Rc<RefCell<FSMNode>>> {
-        // don't like this
-        let children = this.borrow().children.clone();
-        let mut c_idx = 0;
-        for child in children.iter() {
-            if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
-                // TODO: make this configurable whether to do breadth/depth
-                if (greedy || child.borrow().is_null())
-                    && let Some(child) = FSMNode::util_walk_fsm_cycle_aware_internal(
-                        &child,
-                        op,
-                        visited_nodes,
-                        greedy,
-                    )
-                {
-                    return Some(child);
-                }
-                if op(visited_nodes, &this, &child, &mut c_idx) {
-                    return Some(child.clone());
-                }
-            }
-            c_idx += 1;
-        }
-        None
-    }
+
     #[deprecated]
     fn do_stuff_cycle_aware(
         &self,
