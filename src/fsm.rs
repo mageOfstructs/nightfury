@@ -107,8 +107,8 @@ where
         let mut c_idx = 0;
         for child in children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
                 if depth_search {
+                    visited_nodes.insert(child.borrow().id);
                     if (greedy || child.borrow().is_null())
                         && let Some(child) =
                             child.walk_fsm_internal(op, greedy, depth_search, visited_nodes)
@@ -124,11 +124,14 @@ where
         }
         if !depth_search {
             for child in children.iter() {
-                if (greedy || child.borrow().is_null())
-                    && let Some(child) =
-                        child.walk_fsm_internal(op, greedy, depth_search, visited_nodes)
-                {
-                    return Some(child);
+                if !visited_nodes.contains(&child.borrow().id) {
+                    visited_nodes.insert(child.borrow().id);
+                    if (greedy || child.borrow().is_null())
+                        && let Some(child) =
+                            child.walk_fsm_internal(op, greedy, depth_search, visited_nodes)
+                    {
+                        return Some(child);
+                    }
                 }
             }
         }
@@ -472,40 +475,44 @@ impl FSMNode {
         }
     }
     fn get_all_leaves(&self, discovered_leaves: &mut Vec<Rc<RefCell<FSMNode>>>) {
-        self.do_stuff_cycle_aware(&mut |visited_nodes, _, child| {
-            if discovered_leaves
-                .iter()
-                .find(|dl| dl.borrow().id == child.borrow().id)
-                .is_some()
-            {
-                return false;
-            }
-            if child.borrow().children.is_empty() {
-                debug_println!(
-                    "adding node {:?} {}",
-                    child.borrow().value,
-                    child.borrow().short_id()
-                );
-                discovered_leaves.push(child.clone());
-            } else {
-                let mut has_only_cycles = true;
-                for child in &child.borrow().children {
-                    if !visited_nodes.contains(&child.borrow().id) {
-                        has_only_cycles = false;
-                        break;
-                    }
+        Rc::new(RefCell::new(self.clone())).walk_fsm(
+            &mut |visited_nodes, _, child, _| {
+                if discovered_leaves
+                    .iter()
+                    .find(|dl| dl.borrow().id == child.borrow().id)
+                    .is_some()
+                {
+                    return false;
                 }
-                if has_only_cycles {
+                if child.borrow().children.is_empty() {
                     debug_println!(
                         "adding node {:?} {}",
                         child.borrow().value,
                         child.borrow().short_id()
                     );
                     discovered_leaves.push(child.clone());
+                } else {
+                    let mut has_only_cycles = true;
+                    for child in &child.borrow().children {
+                        if !visited_nodes.contains(&child.borrow().id) {
+                            has_only_cycles = false;
+                            break;
+                        }
+                    }
+                    if has_only_cycles {
+                        debug_println!(
+                            "adding node {:?} {} (has_only_cycles case)",
+                            child.borrow().value,
+                            child.borrow().short_id()
+                        );
+                        discovered_leaves.push(child.clone());
+                    }
                 }
-            }
-            false
-        });
+                false
+            },
+            true,
+            false,
+        );
     }
     pub fn add_child_to_all_leaves(this: &Rc<RefCell<FSMNode>>, child: &Rc<RefCell<FSMNode>>) {
         let mut leaves = Vec::new();
