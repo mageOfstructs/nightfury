@@ -77,7 +77,6 @@ pub struct FSMNode {
     id: NodeId,
     is_done: bool,
     pub value: NodeType,
-    parent: Option<Rc<RefCell<FSMNode>>>,
     pub children: Vec<Rc<RefCell<FSMNode>>>,
 }
 
@@ -87,7 +86,6 @@ impl Default for FSMNode {
             id: get_id(),
             is_done: false,
             value: Null,
-            parent: None,
             children: Vec::new(),
         }
     }
@@ -356,14 +354,8 @@ impl FSMNode {
         this.borrow_mut().children.push(Rc::clone(&child));
     }
     pub fn new_null(parent: Option<&Rc<RefCell<FSMNode>>>) -> Rc<RefCell<Self>> {
-        let parent_ref = if let Some(parent) = parent {
-            Some(Rc::clone(parent))
-        } else {
-            None
-        };
         let ret = Rc::new(RefCell::new(Self {
             value: Null,
-            parent: parent_ref,
             children: Vec::new(),
             ..Default::default()
         }));
@@ -465,7 +457,6 @@ impl FSMNode {
     pub fn new(value: NodeType, parent: &Rc<RefCell<FSMNode>>) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
             value,
-            parent: Some(Rc::clone(parent)),
             children: Vec::new(),
             ..Default::default()
         }));
@@ -476,7 +467,6 @@ impl FSMNode {
     pub fn new_required(value: NodeType, parent: &Rc<RefCell<FSMNode>>) -> Rc<RefCell<Self>> {
         let ret = Rc::new(RefCell::new(Self {
             value,
-            parent: Some(Rc::clone(parent)),
             children: Vec::new(),
             ..Default::default()
         }));
@@ -491,7 +481,6 @@ impl FSMNode {
                 expanded: expanded_name,
                 ..Default::default()
             }),
-            parent: None,
             children: Vec::new(),
             ..Default::default()
         }))
@@ -502,7 +491,6 @@ impl FSMNode {
         parent: Rc<RefCell<FSMNode>>,
     ) -> Rc<RefCell<Self>> {
         let ret = Self::new_keyword(expanded_name);
-        ret.borrow_mut().parent = Some(Rc::clone(&parent));
         FSMNode::add_child_cycle_safe(&parent, &ret);
         ret
     }
