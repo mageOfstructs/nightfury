@@ -359,68 +359,6 @@ impl FSMNode {
         this.borrow().dbg();
     }
 
-    #[deprecated]
-    fn do_stuff_cycle_aware(
-        &self,
-        op: &mut impl FnMut(&mut HashSet<usize>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
-    ) -> Option<Rc<RefCell<FSMNode>>> {
-        let mut visited_nodes = HashSet::new();
-        visited_nodes.insert(self.id);
-        self.do_stuff_cycle_aware_internal(op, &mut visited_nodes)
-    }
-    fn do_stuff_cycle_aware_internal(
-        &self,
-        op: &mut impl FnMut(&mut HashSet<usize>, &FSMNode, Rc<RefCell<FSMNode>>) -> bool,
-        visited_nodes: &mut HashSet<usize>,
-    ) -> Option<Rc<RefCell<FSMNode>>> {
-        for child in &self.children {
-            if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
-                if op(visited_nodes, self, child.clone()) {
-                    return Some(child.clone());
-                }
-                if let Some(child) = child
-                    .borrow()
-                    .do_stuff_cycle_aware_internal(op, visited_nodes)
-                {
-                    return Some(child);
-                }
-            }
-        }
-        None
-    }
-
-    #[deprecated]
-    pub fn do_stuff_cycle_aware_non_greedy(
-        &self,
-        op: &mut impl FnMut(Rc<RefCell<FSMNode>>) -> bool,
-    ) -> Option<Rc<RefCell<FSMNode>>> {
-        // TODO: figure out why this breaks things when you start the hashset off with the id of
-        // self
-        self.do_stuff_cycle_aware_non_greedy_internal(op, &mut HashSet::new())
-    }
-    fn do_stuff_cycle_aware_non_greedy_internal(
-        &self,
-        op: &mut impl FnMut(Rc<RefCell<FSMNode>>) -> bool,
-        visited_nodes: &mut HashSet<usize>,
-    ) -> Option<Rc<RefCell<FSMNode>>> {
-        for child in &self.children {
-            if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
-                if op(child.clone()) {
-                    return Some(child.clone());
-                }
-                if let Null = child.borrow().value
-                    && let Some(ret) = child
-                        .borrow()
-                        .do_stuff_cycle_aware_non_greedy_internal(op, visited_nodes)
-                {
-                    return Some(ret);
-                }
-            }
-        }
-        None
-    }
     pub fn has_useful_children(&self) -> bool {
         self.walk_fsm_breadth(
             &mut |_, _, c, _| match c.value {
