@@ -23,6 +23,17 @@ pub trait CycleAwareOp<T> {
     fn walk_fsm_depth(&self, op: &mut T, greedy: bool) -> Option<FSMNodeWrapper> {
         self.walk_fsm(op, greedy, true)
     }
+    // no this is not a workaround I swear
+    // Good things *can* come out of having something like this as constructs like Repeats need
+    // to loop back
+    fn walk_fsm_allow_cycle_to_self(
+        &self,
+        op: &mut T,
+        greedy: bool,
+        depth_search: bool,
+    ) -> Option<FSMNodeWrapper> {
+        self.walk_fsm_internal(op, greedy, depth_search, &mut HashSet::new())
+    }
 }
 
 // TODO: refactor

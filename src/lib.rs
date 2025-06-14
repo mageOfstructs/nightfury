@@ -141,9 +141,8 @@ impl FSMCursor {
         let mut visited_keywords = 0;
         let mut last_keyword = None;
         // TODO: this one relies on buggy behavior from the old function!
-        treenode
-            .borrow()
-            .do_stuff_cycle_aware_non_greedy(&mut |child| {
+        treenode.walk_fsm_allow_cycle_to_self(
+            &mut |_, _, child, _| {
                 let node_val = &child.borrow().value;
                 debug_println!(
                     "search_rec closure at {:?} {}",
@@ -169,7 +168,10 @@ impl FSMCursor {
                     }
                     _ => false,
                 }
-            });
+            },
+            false,
+            false,
+        );
         debug_println!("pm: {potential_matches}");
         if keyword_match.is_some() && potential_matches == 1 {
             return keyword_match;
