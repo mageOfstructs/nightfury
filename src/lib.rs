@@ -748,4 +748,21 @@ mod tests {
         assert_eq!("uwu", cursor2.advance('u').unwrap());
         root.borrow().dbg();
     }
+
+    #[test]
+    fn test_fancy_regex_usecase() {
+        let root = create_graph_from_ebnf(
+            r"
+     main ::= (#'[0-9]+' 'uwu') | (#'[a-z]' 'awa');
+",
+        )
+        .unwrap();
+        let mut cursor = FSMCursor::new(&root);
+        let mut cursor2 = cursor.clone();
+        assert_eq!(None, cursor.advance('0'));
+        assert_eq!("uwu", cursor.advance('u').unwrap());
+        assert_eq!(None, cursor2.advance('b'));
+        assert_eq!("awa", cursor2.advance('a').unwrap());
+        root.borrow().dbg();
+    }
 }
