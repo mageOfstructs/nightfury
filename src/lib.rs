@@ -71,6 +71,7 @@ impl NameShortener {
 }
 
 type InternalCursor = Weak<RefCell<FSMNode>>;
+#[derive(Clone, Debug)]
 pub struct FSMCursor {
     cur_ast_pos: InternalCursor,
     input_buf: String,
@@ -563,8 +564,8 @@ mod tests {
     fn test_sql() {
         let bnf = r"
         query ::= select | insert;
-        select ::= 'SELECT' '*' | collist 'FROM' #'^.*;$';
-        insert ::= 'INSERT INTO' #'^.* $' 'VALUES' '(' collist ')';
+        select ::= 'SELECT' '*' | collist 'FROM' #'^.*$' ';';
+        insert ::= 'INSERT INTO' #'^.*$' ' ' 'VALUES' '(' collist ')';
         collist ::= col ( ',' collist )?;
         col ::= #'^.*[, ]$';
     ";
@@ -736,6 +737,15 @@ mod tests {
 ",
         )
         .unwrap();
+        let mut cursor = FSMCursor::new(&root);
+        for i in 0..=9 {
+            assert_eq!(None, cursor.advance(i.to_string().chars().nth(0).unwrap()));
+        }
+        let mut cursor2 = cursor.clone();
+        assert_eq!("-", cursor.advance('-').unwrap());
+        assert_eq!("test", cursor.advance('t').unwrap());
+        assert_eq!(";", cursor2.advance(';').unwrap());
+        assert_eq!("uwu", cursor2.advance('u').unwrap());
         root.borrow().dbg();
     }
 }
