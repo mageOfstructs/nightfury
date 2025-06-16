@@ -85,6 +85,35 @@ impl FSMCursor {
             unfinished_nodes: Vec::new(),
         }
     }
+    fn handle_userdefined_combo(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
+        let child_idx = final_chars.iter().position(|char| *char == input);
+        if let Some(child_idx) = child_idx {
+            let strong_ref = self.get_cur_ast_binding();
+            // let borrow = strong_ref.borrow();
+            // let next_node = Rc::clone(&borrow.children[child_idx]);
+            let mut ret = None;
+            strong_ref.walk_fsm_depth(
+                &mut |_, _, c, _| {
+                    if let Keyword(Keyword {
+                        short, expanded, ..
+                    }) = &c.borrow().value
+                        && short.starts_with(input)
+                    {
+                        self.update_cursor(&c);
+                        self.input_buf.clear();
+                        ret = Some(expanded.clone());
+                        true
+                    } else {
+                        false
+                    }
+                },
+                false,
+            );
+            ret
+        } else {
+            None
+        }
+    }
     fn handle_userdefined(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
         if let Some(child_idx) = child_idx {
@@ -117,7 +146,11 @@ impl FSMCursor {
         treenode.borrow().walk_fsm_breadth(
             &mut |_, _, child, _| match &child.value {
                 UserDefined { .. } => true,
-                UserDefinedRegex(regex) if regex.partial_match(&self.input_buf) => true,
+                UserDefinedRegex(regex) | UserDefinedCombo(regex, _)
+                    if regex.partial_match(&self.input_buf) =>
+                {
+                    true
+                }
                 _ => false,
             },
             false,
@@ -136,6 +169,7 @@ impl FSMCursor {
             treenode.borrow().value,
             treenode.borrow().short_id()
         );
+        debug_println!("search_rec input buf: {}", self.input_buf);
         let mut keyword_match = None;
         let mut potential_matches = 0;
         let mut visited_keywords = 0;
@@ -274,6 +308,12 @@ impl FSMCursor {
                     return ret;
                 }
             }
+            UserDefinedCombo(_, f) => {
+                let ret = self.handle_userdefined_combo(input, f);
+                if ret.is_some() {
+                    return ret;
+                }
+            }
             _ => {
                 let res = self.search_rec(&binding);
                 if let Some(node) = res {
@@ -288,6 +328,10 @@ impl FSMCursor {
                             res
                         }
                         NodeType::UserDefinedRegex(_) => None,
+                        NodeType::UserDefinedCombo(r, f) => {
+                            let res = self.handle_userdefined_combo(input, f);
+                            res
+                        }
                         _ => unreachable!(),
                     };
                 }
@@ -336,7 +380,9 @@ impl FSMCursor {
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
         match self.get_cur_ast_binding().borrow().value {
-            NodeType::UserDefined { .. } | NodeType::UserDefinedRegex(..) => true,
+            NodeType::UserDefined { .. }
+            | NodeType::UserDefinedRegex(..)
+            | NodeType::UserDefinedCombo(_, _) => true,
             _ => false,
         }
     }
@@ -354,6 +400,8 @@ impl FSMCursor {
 
 #[cfg(test)]
 mod tests {
+    use crate::frontend::create_graph_from_ebnf;
+
     use super::*;
 
     #[test]
@@ -678,5 +726,16 @@ mod tests {
         );
         assert_eq!(1, root.borrow().children.len());
         assert_eq!(1, root.borrow().children[0].borrow().children.len());
+    }
+
+    #[test]
+    fn test_userdef_links() {
+        let root = create_graph_from_ebnf(
+            r"
+     main ::= #'[0-9]+' ( ('-' 'test') | (';' 'uwu') );
+",
+        )
+        .unwrap();
+        root.borrow().dbg();
     }
 }

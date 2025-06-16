@@ -177,6 +177,7 @@ pub enum NodeType {
     Keyword(Keyword),
     UserDefined { final_chars: Vec<char> },
     UserDefinedRegex(Regex),
+    UserDefinedCombo(Regex, Vec<char>),
     Null,
 }
 
@@ -193,6 +194,10 @@ impl PartialEq for NodeType {
             },
             UserDefinedRegex(r) => match other {
                 UserDefinedRegex(r2) => r.as_str().eq(r2.as_str()),
+                _ => false,
+            },
+            UserDefinedCombo(r, f) => match other {
+                UserDefinedCombo(r2, f2) => r.as_str().eq(r2.as_str()) && f.eq(f2),
                 _ => false,
             },
             Null => match other {
@@ -303,6 +308,39 @@ impl FSMNode {
             }
         });
         ret
+    }
+    pub fn set_userdef_links(this: &Rc<RefCell<FSMNode>>) {
+        let mut userdefs = Vec::new();
+        this.walk_fsm_breadth(
+            &mut |_, p, _, _| {
+                if let UserDefinedCombo(_, _) = p.borrow().value {
+                    userdefs.push(Rc::clone(&p));
+                }
+                false
+            },
+            true,
+        );
+        println!("{}", userdefs.len());
+        for userdef in userdefs {
+            println!(
+                "{:?} {}",
+                userdef.borrow().value,
+                userdef.borrow().short_id()
+            );
+            userdef.walk_fsm_depth(
+                &mut |_, _, c, _| {
+                    println!("{:?} {}", c.borrow().value, c.borrow().short_id());
+                    if let Keyword(Keyword { short, .. }) = &c.borrow().value {
+                        if let UserDefinedCombo(_, fcs) = &mut userdef.borrow_mut().value {
+                            fcs.push(short.chars().nth(0).unwrap()); // bad handling, only possible when
+                            // there aren't any conflicts
+                        }
+                    }
+                    false
+                },
+                false,
+            );
+        }
     }
     pub fn minify(this: &Rc<RefCell<FSMNode>>) {
         debug_println!("before minify:");
@@ -506,6 +544,16 @@ impl FSMNode {
             ..Default::default()
         }));
         parent.borrow_mut().add_child(&ret);
+        ret
+    }
+
+    pub fn new_userdef(r: Regex, parent: &Rc<RefCell<FSMNode>>) -> Rc<RefCell<Self>> {
+        let ret = Rc::new(RefCell::new(Self {
+            value: UserDefinedCombo(r, Vec::new()),
+            children: Vec::new(),
+            ..Default::default()
+        }));
+        FSMNode::add_child_cycle_safe(parent, &ret);
         ret
     }
 

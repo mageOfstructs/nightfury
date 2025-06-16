@@ -27,10 +27,7 @@ fn handle_node(
     debug_println!("handle_node got {:?}", cur_node);
     let ret = match &cur_node {
         Node::String(str) => FSMNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root)),
-        Node::RegexString(r) => FSMNode::new(
-            crate::NodeType::UserDefinedRegex(Regex::new(r).unwrap()),
-            &cur_root,
-        ),
+        Node::RegexString(r) => FSMNode::new_userdef(Regex::new(r).unwrap(), cur_root),
         Node::Terminal(name) => {
             if terminals.contains_key(name) {
                 debug_println!("Found {name} in cache!");
@@ -150,6 +147,7 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<FSMNode>>, String
             // sanity op, is_done() won't cancel preemptively
             FSMNode::add_child_to_all_leaves(&root, &FSMNode::new_null(None));
             FSMNode::minify(&root);
+            FSMNode::set_userdef_links(&root);
             debug_println!("Total node cnt: {}", FSMNode::node_cnt(&root));
             // for (name, term) in terminals.iter() {
             //     println!("Term {}", name);
