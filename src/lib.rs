@@ -13,6 +13,7 @@ use std::rc::{Rc, Weak};
 
 pub mod frontend;
 mod fsm;
+pub mod protocol;
 
 static mut CNT: usize = 0;
 fn get_id() -> usize {
