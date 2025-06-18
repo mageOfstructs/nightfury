@@ -1,9 +1,10 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap};
 
 use debug_print::debug_println;
 use ebnf::{Expression, Grammar, Node, RegexExtKind, SymbolKind};
 use regex::Regex;
 
+use super::FSMRc;
 use crate::FSMNode;
 
 pub fn print_parsed_ebnf(syntax: &str) {
@@ -21,12 +22,14 @@ enum TerminalState {
 fn handle_node(
     grammar: &Grammar,
     cur_node: &Node,
-    cur_root: &Rc<RefCell<FSMNode>>,
-    terminals: &mut HashMap<String, (Rc<RefCell<FSMNode>>, TerminalState)>,
-) -> Rc<RefCell<FSMNode>> {
+    cur_root: &FSMRc<RefCell<FSMNode>>,
+    terminals: &mut HashMap<String, (FSMRc<RefCell<FSMNode>>, TerminalState)>,
+) -> FSMRc<RefCell<FSMNode>> {
     debug_println!("handle_node got {:?}", cur_node);
     let ret = match &cur_node {
-        Node::String(str) => FSMNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root)),
+        Node::String(str) => {
+            FSMNode::new_keyword_with_parent(str.to_string(), FSMRc::clone(cur_root))
+        }
         Node::RegexString(r) => FSMNode::new_userdef(Regex::new(r).unwrap(), cur_root),
         Node::Terminal(name) => {
             if terminals.contains_key(name) {
@@ -52,12 +55,12 @@ fn handle_node(
                 debug_println!("term_root: {}", term_root.borrow().short_id());
                 terminals.insert(
                     name.to_string(),
-                    (Rc::clone(&term_root), TerminalState::Stub),
+                    (FSMRc::clone(&term_root), TerminalState::Stub),
                 );
                 handle_node(grammar, &terminal.rhs, &term_root, terminals);
                 terminals.insert(
                     name.to_string(),
-                    (Rc::clone(&term_root), TerminalState::Created),
+                    (FSMRc::clone(&term_root), TerminalState::Created),
                 );
                 debug_println!("Finish terminal");
                 debug_println!("young {}:", name);
@@ -132,7 +135,7 @@ fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expressi
     grammer.expressions.iter().find(|expr| expr.lhs == name)
 }
 
-pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<FSMNode>>, String> {
+pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<RefCell<FSMNode>>, String> {
     match ebnf::get_grammar(ebnf) {
         Ok(grammar) => {
             let root = FSMNode::new_null(None);

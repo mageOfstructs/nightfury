@@ -9,11 +9,16 @@ use fsm::NodeType::{self, *};
 use fsm::{CycleAwareOp, Keyword};
 use regex::Regex;
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
 
 pub mod frontend;
+
 mod fsm;
+pub use fsm::FSMNodeWrapper;
+
 pub mod protocol;
+
+type FSMRc<T> = std::sync::Arc<T>;
+type FSMWeak<T> = std::sync::Weak<T>;
 
 static mut CNT: usize = 0;
 fn get_id() -> usize {
@@ -71,7 +76,7 @@ impl NameShortener {
     }
 }
 
-type InternalCursor = Weak<RefCell<FSMNode>>;
+type InternalCursor = FSMWeak<RefCell<FSMNode>>;
 #[derive(Clone, Debug)]
 pub struct FSMCursor {
     cur_ast_pos: InternalCursor,
@@ -80,9 +85,9 @@ pub struct FSMCursor {
 }
 
 impl FSMCursor {
-    pub fn new(fsm_root: &Rc<RefCell<FSMNode>>) -> Self {
+    pub fn new(fsm_root: &FSMRc<RefCell<FSMNode>>) -> Self {
         Self {
-            cur_ast_pos: Rc::downgrade(fsm_root),
+            cur_ast_pos: FSMRc::downgrade(fsm_root),
             input_buf: String::new(),
             unfinished_nodes: Vec::new(),
         }
@@ -92,7 +97,7 @@ impl FSMCursor {
         if let Some(child_idx) = child_idx {
             let strong_ref = self.get_cur_ast_binding();
             // let borrow = strong_ref.borrow();
-            // let next_node = Rc::clone(&borrow.children[child_idx]);
+            // let next_node = FSMRc::clone(&borrow.children[child_idx]);
             let mut ret = None;
             strong_ref.walk_fsm_depth(
                 &mut |_, _, c, _| {
@@ -121,7 +126,7 @@ impl FSMCursor {
         if let Some(child_idx) = child_idx {
             let strong_ref = self.get_cur_ast_binding();
             let borrow = strong_ref.borrow();
-            let next_node = Rc::clone(&borrow.children[child_idx]);
+            let next_node = FSMRc::clone(&borrow.children[child_idx]);
             self.update_cursor(&next_node);
             let ret = if let NodeType::Keyword(Keyword {
                 short,
@@ -144,7 +149,10 @@ impl FSMCursor {
     pub fn clear_inputbuf(&mut self) {
         self.input_buf.clear();
     }
-    fn search_for_userdefs(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
+    fn search_for_userdefs(
+        &self,
+        treenode: &FSMRc<RefCell<FSMNode>>,
+    ) -> Option<FSMRc<RefCell<FSMNode>>> {
         treenode.borrow().walk_fsm_breadth(
             &mut |_, _, child, _| match &child.value {
                 UserDefined { .. } => true,
@@ -158,14 +166,17 @@ impl FSMCursor {
             false,
         )
     }
-    pub fn search_rec(&self, treenode: &Rc<RefCell<FSMNode>>) -> Option<Rc<RefCell<FSMNode>>> {
+    pub fn search_rec(
+        &self,
+        treenode: &FSMRc<RefCell<FSMNode>>,
+    ) -> Option<FSMRc<RefCell<FSMNode>>> {
         self.search_rec_internal(treenode, false)
     }
     pub fn search_rec_internal(
         &self,
-        treenode: &Rc<RefCell<FSMNode>>,
+        treenode: &FSMRc<RefCell<FSMNode>>,
         best_effort: bool,
-    ) -> Option<Rc<RefCell<FSMNode>>> {
+    ) -> Option<FSMRc<RefCell<FSMNode>>> {
         debug_println!(
             "search_rec at {:?} {}",
             treenode.borrow().value,
@@ -342,14 +353,14 @@ impl FSMCursor {
         None
     }
 
-    fn update_cursor(&mut self, node: &Rc<RefCell<FSMNode>>) {
-        self.cur_ast_pos = Rc::downgrade(&Rc::clone(&node));
+    fn update_cursor(&mut self, node: &FSMRc<RefCell<FSMNode>>) {
+        self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(&node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
             ..
         }) = &node.borrow().value
         {
-            self.unfinished_nodes.push(Rc::downgrade(&node));
+            self.unfinished_nodes.push(FSMRc::downgrade(&node));
         } else if node.borrow().children.is_empty() && self.unfinished_nodes.len() > 1 {
             // we don't need to jump back if only one remains
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
@@ -377,7 +388,7 @@ impl FSMCursor {
         }
     }
 
-    fn get_cur_ast_binding(&self) -> Rc<RefCell<FSMNode>> {
+    fn get_cur_ast_binding(&self) -> FSMRc<RefCell<FSMNode>> {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
@@ -393,7 +404,7 @@ impl FSMCursor {
         println!("{}", self.get_cur_ast_binding().borrow().id());
         self.get_cur_ast_binding().borrow().value.clone()
     }
-    fn find_node_with_code(&self, short: &str) -> Option<Rc<RefCell<FSMNode>>> {
+    fn find_node_with_code(&self, short: &str) -> Option<FSMRc<RefCell<FSMNode>>> {
         let binding = self.get_cur_ast_binding();
         let binding = binding.borrow();
         binding.find_node_with_code(short)
@@ -618,7 +629,7 @@ mod tests {
         assert!(cursor.is_done());
     }
 
-    fn util_check_str(root: &Rc<RefCell<FSMNode>>, str: &str) {
+    fn util_check_str(root: &FSMRc<RefCell<FSMNode>>, str: &str) {
         let mut cursor = FSMCursor::new(root);
         for char in str.chars() {
             cursor.advance(char);
