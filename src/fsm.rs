@@ -175,7 +175,11 @@ impl Default for Keyword {
 #[derive(Debug, Clone)]
 pub enum NodeType {
     Keyword(Keyword),
-    UserDefined { final_chars: Vec<char> },
+    #[deprecated]
+    UserDefined {
+        final_chars: Vec<char>,
+    },
+    #[deprecated]
     UserDefinedRegex(Regex),
     UserDefinedCombo(Regex, Vec<char>),
     Null,
