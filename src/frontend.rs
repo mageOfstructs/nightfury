@@ -1,9 +1,10 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::collections::HashMap;
 
 use debug_print::debug_println;
 use ebnf::{Expression, Grammar, Node, RegexExtKind, SymbolKind};
 use regex::Regex;
 
+use super::FSMLock;
 use super::FSMRc;
 use crate::FSMNode;
 
@@ -22,9 +23,9 @@ enum TerminalState {
 fn handle_node(
     grammar: &Grammar,
     cur_node: &Node,
-    cur_root: &FSMRc<RefCell<FSMNode>>,
-    terminals: &mut HashMap<String, (FSMRc<RefCell<FSMNode>>, TerminalState)>,
-) -> FSMRc<RefCell<FSMNode>> {
+    cur_root: &FSMRc<FSMLock<FSMNode>>,
+    terminals: &mut HashMap<String, (FSMRc<FSMLock<FSMNode>>, TerminalState)>,
+) -> FSMRc<FSMLock<FSMNode>> {
     debug_println!("handle_node got {:?}", cur_node);
     let ret = match &cur_node {
         Node::String(str) => {
@@ -135,7 +136,7 @@ fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expressi
     grammer.expressions.iter().find(|expr| expr.lhs == name)
 }
 
-pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<RefCell<FSMNode>>, String> {
+pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<FSMLock<FSMNode>>, String> {
     match ebnf::get_grammar(ebnf) {
         Ok(grammar) => {
             let root = FSMNode::new_null(None);

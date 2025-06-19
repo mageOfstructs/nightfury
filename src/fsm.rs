@@ -1,11 +1,11 @@
 use super::FSMRc;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
+use super::FSMLock;
 use super::get_id;
 use crate::NameShortener;
 
-pub type FSMNodeWrapper = FSMRc<RefCell<FSMNode>>;
+pub type FSMNodeWrapper = FSMRc<FSMLock<FSMNode>>;
 trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut isize) -> bool;
 trait FSMUnsafe = Fn(&mut HashSet<NodeId>, &FSMNode, &FSMNode, &mut isize) -> bool;
 pub trait CycleAwareOp<T> {
@@ -221,7 +221,7 @@ pub struct FSMNode {
     id: NodeId,
     is_done: bool,
     pub value: NodeType,
-    pub children: Vec<FSMRc<RefCell<FSMNode>>>,
+    pub children: Vec<FSMRc<FSMLock<FSMNode>>>,
 }
 
 impl Default for FSMNode {
@@ -249,13 +249,13 @@ impl FSMNode {
         if let Null = self.value { true } else { false }
     }
     fn deep_clone_internal(
-        stub: &FSMRc<RefCell<Self>>,
+        stub: &FSMRc<FSMLock<Self>>,
         old: &FSMNode,
-        visited_nodes: &mut HashMap<usize, FSMRc<RefCell<FSMNode>>>,
-    ) -> FSMRc<RefCell<Self>> {
+        visited_nodes: &mut HashMap<usize, FSMRc<FSMLock<FSMNode>>>,
+    ) -> FSMRc<FSMLock<Self>> {
         for child in &old.children {
             if !visited_nodes.contains_key(&child.borrow().id) {
-                let clone = FSMRc::new(RefCell::new(Self {
+                let clone = FSMRc::new(FSMLock::new(Self {
                     value: child.borrow().value.clone(),
                     ..Default::default()
                 }));
@@ -270,9 +270,9 @@ impl FSMNode {
         }
         stub.clone()
     }
-    pub fn deep_clone(&self) -> FSMRc<RefCell<Self>> {
+    pub fn deep_clone(&self) -> FSMRc<FSMLock<Self>> {
         debug_println!("Deep cloning node {}", self.short_id());
-        let ret = FSMRc::new(RefCell::new(Self {
+        let ret = FSMRc::new(FSMLock::new(Self {
             value: self.value.clone(),
             ..Default::default()
         }));
@@ -286,7 +286,7 @@ impl FSMNode {
     fn has_direct_child(&self, id: usize) -> bool {
         self.children.iter().find(|c| c.borrow().id == id).is_some()
     }
-    pub fn node_cnt(this: &FSMRc<RefCell<FSMNode>>) -> usize {
+    pub fn node_cnt(this: &FSMRc<FSMLock<FSMNode>>) -> usize {
         let mut ret = 1; // one root node
         this.walk_fsm_depth(
             &mut |_, parent, _, _| {
@@ -309,7 +309,7 @@ impl FSMNode {
         });
         ret
     }
-    pub fn set_userdef_links(this: &FSMRc<RefCell<FSMNode>>) {
+    pub fn set_userdef_links(this: &FSMRc<FSMLock<FSMNode>>) {
         let mut userdefs = Vec::new();
         this.walk_fsm_breadth(
             &mut |_, p, _, _| {
@@ -342,7 +342,7 @@ impl FSMNode {
             );
         }
     }
-    pub fn minify(this: &FSMRc<RefCell<FSMNode>>) {
+    pub fn minify(this: &FSMRc<FSMLock<FSMNode>>) {
         debug_println!("before minify:");
         this.borrow().dbg();
         let mut cycle_translation_table = HashMap::new();
@@ -408,19 +408,19 @@ impl FSMNode {
         .is_some()
     }
 
-    pub fn get_last_child(&self) -> Option<FSMRc<RefCell<FSMNode>>> {
+    pub fn get_last_child(&self) -> Option<FSMRc<FSMLock<FSMNode>>> {
         self.children.last().cloned()
     }
-    pub fn add_child(&mut self, child: &FSMRc<RefCell<FSMNode>>) {
+    pub fn add_child(&mut self, child: &FSMRc<FSMLock<FSMNode>>) {
         while self.handle_potential_conflict(child) {}
         self.children.push(FSMRc::clone(&child));
     }
-    pub fn add_child_cycle_safe(this: &FSMRc<RefCell<FSMNode>>, child: &FSMRc<RefCell<FSMNode>>) {
+    pub fn add_child_cycle_safe(this: &FSMRc<FSMLock<FSMNode>>, child: &FSMRc<FSMLock<FSMNode>>) {
         while this.borrow().handle_potential_conflict(child) {}
         this.borrow_mut().children.push(FSMRc::clone(&child));
     }
-    pub fn new_null(parent: Option<&FSMRc<RefCell<FSMNode>>>) -> FSMRc<RefCell<Self>> {
-        let ret = FSMRc::new(RefCell::new(Self {
+    pub fn new_null(parent: Option<&FSMRc<FSMLock<FSMNode>>>) -> FSMRc<FSMLock<Self>> {
+        let ret = FSMRc::new(FSMLock::new(Self {
             value: Null,
             children: Vec::new(),
             ..Default::default()
@@ -450,8 +450,8 @@ impl FSMNode {
             }
         }
     }
-    fn get_all_leaves(&self, discovered_leaves: &mut Vec<FSMRc<RefCell<FSMNode>>>) {
-        FSMRc::new(RefCell::new(self.clone())).walk_fsm(
+    fn get_all_leaves(&self, discovered_leaves: &mut Vec<FSMRc<FSMLock<FSMNode>>>) {
+        FSMRc::new(FSMLock::new(self.clone())).walk_fsm(
             &mut |visited_nodes, _, child, _| {
                 if discovered_leaves
                     .iter()
@@ -491,8 +491,8 @@ impl FSMNode {
         );
     }
     pub fn add_child_to_all_leaves(
-        this: &FSMRc<RefCell<FSMNode>>,
-        child: &FSMRc<RefCell<FSMNode>>,
+        this: &FSMRc<FSMLock<FSMNode>>,
+        child: &FSMRc<FSMLock<FSMNode>>,
     ) {
         let mut leaves = Vec::new();
         this.borrow().get_all_leaves(&mut leaves);
@@ -508,7 +508,7 @@ impl FSMNode {
         }
     }
 
-    pub fn race_to_leaf(&self) -> Option<FSMRc<RefCell<FSMNode>>> {
+    pub fn race_to_leaf(&self) -> Option<FSMRc<FSMLock<FSMNode>>> {
         self.walk_fsm_depth(
             &mut |visited_nodes, _, child, _| {
                 let mut ret = true;
@@ -530,8 +530,8 @@ impl FSMNode {
         self.dbg_internal(0, &mut HashSet::new());
     }
 
-    pub fn new(value: NodeType, parent: &FSMRc<RefCell<FSMNode>>) -> FSMRc<RefCell<Self>> {
-        let ret = FSMRc::new(RefCell::new(Self {
+    pub fn new(value: NodeType, parent: &FSMRc<FSMLock<FSMNode>>) -> FSMRc<FSMLock<Self>> {
+        let ret = FSMRc::new(FSMLock::new(Self {
             value,
             children: Vec::new(),
             ..Default::default()
@@ -540,8 +540,8 @@ impl FSMNode {
         ret
     }
 
-    pub fn new_required(value: NodeType, parent: &FSMRc<RefCell<FSMNode>>) -> FSMRc<RefCell<Self>> {
-        let ret = FSMRc::new(RefCell::new(Self {
+    pub fn new_required(value: NodeType, parent: &FSMRc<FSMLock<FSMNode>>) -> FSMRc<FSMLock<Self>> {
+        let ret = FSMRc::new(FSMLock::new(Self {
             value,
             children: Vec::new(),
             ..Default::default()
@@ -550,8 +550,8 @@ impl FSMNode {
         ret
     }
 
-    pub fn new_userdef(r: Regex, parent: &FSMRc<RefCell<FSMNode>>) -> FSMRc<RefCell<Self>> {
-        let ret = FSMRc::new(RefCell::new(Self {
+    pub fn new_userdef(r: Regex, parent: &FSMRc<FSMLock<FSMNode>>) -> FSMRc<FSMLock<Self>> {
+        let ret = FSMRc::new(FSMLock::new(Self {
             value: UserDefinedCombo(r, Vec::new()),
             children: Vec::new(),
             ..Default::default()
@@ -560,8 +560,8 @@ impl FSMNode {
         ret
     }
 
-    pub fn new_keyword(expanded_name: String) -> FSMRc<RefCell<Self>> {
-        FSMRc::new(RefCell::new(Self {
+    pub fn new_keyword(expanded_name: String) -> FSMRc<FSMLock<Self>> {
+        FSMRc::new(FSMLock::new(Self {
             value: Keyword(Keyword {
                 short: expanded_name.chars().nth(0).unwrap().to_string(),
                 expanded: expanded_name,
@@ -574,13 +574,13 @@ impl FSMNode {
 
     pub fn new_keyword_with_parent(
         expanded_name: String,
-        parent: FSMRc<RefCell<FSMNode>>,
-    ) -> FSMRc<RefCell<Self>> {
+        parent: FSMRc<FSMLock<FSMNode>>,
+    ) -> FSMRc<FSMLock<Self>> {
         let ret = Self::new_keyword(expanded_name);
         FSMNode::add_child_cycle_safe(&parent, &ret);
         ret
     }
-    pub fn find_node_with_code(&self, short: &str) -> Option<FSMRc<RefCell<FSMNode>>> {
+    pub fn find_node_with_code(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
         for child in &self.children {
             if let Keyword(Keyword { short: nshort, .. }) = &child.borrow().value
                 && nshort == short
@@ -614,7 +614,7 @@ impl FSMNode {
         false
     }
 
-    fn get_conflicting_node(&self, short: &str) -> Option<FSMRc<RefCell<FSMNode>>> {
+    fn get_conflicting_node(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
         self.walk_fsm_breadth(
             &mut |_, _, child, _| {
                 println!("awa?");
@@ -628,7 +628,7 @@ impl FSMNode {
             false,
         )
     }
-    fn handle_potential_conflict_internal(&self, child: &FSMRc<RefCell<FSMNode>>) -> bool {
+    fn handle_potential_conflict_internal(&self, child: &FSMRc<FSMLock<FSMNode>>) -> bool {
         let child_borrow = child.borrow();
         let mut ret = false;
         if let Keyword(Keyword { short: cshort, .. }) = &child_borrow.value {
@@ -655,7 +655,7 @@ impl FSMNode {
         }
         ret
     }
-    pub fn handle_potential_conflict(&self, child: &FSMRc<RefCell<FSMNode>>) -> bool {
+    pub fn handle_potential_conflict(&self, child: &FSMRc<FSMLock<FSMNode>>) -> bool {
         let child_borrow = child.borrow();
         if let Keyword(keyword_struct) = &child_borrow.value {
             debug_println!("{:?}", self.value);

@@ -27,3 +27,6 @@ path = "src/main.rs"
 [[bin]]
 name = "server"
 path = "src/server.rs"
+
+[features]
+thread-safe = []

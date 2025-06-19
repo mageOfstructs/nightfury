@@ -2,13 +2,16 @@
 #![feature(if_let_guard)]
 #![feature(trait_alias)]
 #![feature(impl_trait_in_bindings)]
+#![feature(lock_value_accessors)]
 
 use debug_print::debug_println;
 pub use fsm::FSMNode;
 use fsm::NodeType::{self, *};
 use fsm::{CycleAwareOp, Keyword};
 use regex::Regex;
-use std::cell::RefCell;
+#[cfg(not(feature = "thread-safe"))]
+use std::cell::{Ref, RefCell, RefMut};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub mod frontend;
 
@@ -16,9 +19,6 @@ mod fsm;
 pub use fsm::FSMNodeWrapper;
 
 pub mod protocol;
-
-type FSMRc<T> = std::sync::Arc<T>;
-type FSMWeak<T> = std::sync::Weak<T>;
 
 static mut CNT: usize = 0;
 fn get_id() -> usize {
@@ -61,6 +61,8 @@ impl NameShortener {
         let ret = if let Some(old) = old {
             if old == full {
                 return old.to_string(); // FIXME: this can't be a good handling
+                // well screw you past me! It's actually vital for collisions between s1 and s2
+                // where s2.starts_with(s1) applies
             }
             if full.len() < old.len() {
                 panic!("NS: There is nothing left...")
@@ -76,7 +78,59 @@ impl NameShortener {
     }
 }
 
-type InternalCursor = FSMWeak<RefCell<FSMNode>>;
+#[cfg(not(feature = "thread-safe"))]
+type FSMRc<T> = std::rc::Rc<T>;
+#[cfg(not(feature = "thread-safe"))]
+type FSMWeak<T> = std::rc::Weak<T>;
+#[cfg(not(feature = "thread-safe"))]
+#[derive(Debug, PartialEq)]
+pub struct FSMLock<T>(RefCell<T>);
+#[cfg(not(feature = "thread-safe"))]
+impl<T> FSMLock<T> {
+    fn new(val: T) -> Self {
+        Self(RefCell::new(val))
+    }
+    pub fn borrow(&self) -> Ref<'_, T> {
+        self.0.borrow()
+    }
+    fn borrow_mut(&self) -> RefMut<'_, T> {
+        self.0.borrow_mut()
+    }
+    fn replace_with(&self, op: impl FnOnce(&mut T) -> T) {
+        self.0.replace_with(op);
+    }
+}
+
+#[cfg(feature = "thread-safe")]
+type FSMRc<T> = std::sync::Arc<T>;
+#[cfg(feature = "thread-safe")]
+type FSMWeak<T> = std::sync::Weak<T>;
+#[cfg(feature = "thread-safe")]
+#[derive(Debug)]
+pub struct FSMLock<T>(RwLock<T>);
+#[cfg(feature = "thread-safe")]
+impl<T> FSMLock<T> {
+    pub fn borrow(&self) -> RwLockReadGuard<'_, T> {
+        self.0.read().expect("FSMLock borrow()")
+    }
+    fn borrow_mut(&self) -> RwLockWriteGuard<'_, T> {
+        self.0.write().expect("FSMLock borrow()")
+    }
+    fn new(val: T) -> Self {
+        Self(RwLock::new(val))
+    }
+    fn replace_with(&self, op: impl FnOnce(&mut T) -> T) {
+        let new = op(&mut self.0.write().unwrap());
+        self.0.set(new).unwrap();
+    }
+}
+#[cfg(feature = "thread-safe")]
+impl<T: PartialEq> PartialEq for FSMLock<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.read().unwrap().eq(&other.0.read().unwrap())
+    }
+}
+type InternalCursor = FSMWeak<FSMLock<FSMNode>>;
 #[derive(Clone, Debug)]
 pub struct FSMCursor {
     cur_ast_pos: InternalCursor,
@@ -85,7 +139,7 @@ pub struct FSMCursor {
 }
 
 impl FSMCursor {
-    pub fn new(fsm_root: &FSMRc<RefCell<FSMNode>>) -> Self {
+    pub fn new(fsm_root: &FSMRc<FSMLock<FSMNode>>) -> Self {
         Self {
             cur_ast_pos: FSMRc::downgrade(fsm_root),
             input_buf: String::new(),
@@ -94,7 +148,7 @@ impl FSMCursor {
     }
     fn handle_userdefined_combo(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
-        if let Some(child_idx) = child_idx {
+        if let Some(_) = child_idx {
             let strong_ref = self.get_cur_ast_binding();
             // let borrow = strong_ref.borrow();
             // let next_node = FSMRc::clone(&borrow.children[child_idx]);
@@ -151,8 +205,8 @@ impl FSMCursor {
     }
     fn search_for_userdefs(
         &self,
-        treenode: &FSMRc<RefCell<FSMNode>>,
-    ) -> Option<FSMRc<RefCell<FSMNode>>> {
+        treenode: &FSMRc<FSMLock<FSMNode>>,
+    ) -> Option<FSMRc<FSMLock<FSMNode>>> {
         treenode.borrow().walk_fsm_breadth(
             &mut |_, _, child, _| match &child.value {
                 UserDefined { .. } => true,
@@ -168,15 +222,15 @@ impl FSMCursor {
     }
     pub fn search_rec(
         &self,
-        treenode: &FSMRc<RefCell<FSMNode>>,
-    ) -> Option<FSMRc<RefCell<FSMNode>>> {
+        treenode: &FSMRc<FSMLock<FSMNode>>,
+    ) -> Option<FSMRc<FSMLock<FSMNode>>> {
         self.search_rec_internal(treenode, false)
     }
     pub fn search_rec_internal(
         &self,
-        treenode: &FSMRc<RefCell<FSMNode>>,
+        treenode: &FSMRc<FSMLock<FSMNode>>,
         best_effort: bool,
-    ) -> Option<FSMRc<RefCell<FSMNode>>> {
+    ) -> Option<FSMRc<FSMLock<FSMNode>>> {
         debug_println!(
             "search_rec at {:?} {}",
             treenode.borrow().value,
@@ -353,7 +407,7 @@ impl FSMCursor {
         None
     }
 
-    fn update_cursor(&mut self, node: &FSMRc<RefCell<FSMNode>>) {
+    fn update_cursor(&mut self, node: &FSMRc<FSMLock<FSMNode>>) {
         self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(&node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
@@ -388,7 +442,7 @@ impl FSMCursor {
         }
     }
 
-    fn get_cur_ast_binding(&self) -> FSMRc<RefCell<FSMNode>> {
+    fn get_cur_ast_binding(&self) -> FSMRc<FSMLock<FSMNode>> {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
@@ -404,7 +458,7 @@ impl FSMCursor {
         println!("{}", self.get_cur_ast_binding().borrow().id());
         self.get_cur_ast_binding().borrow().value.clone()
     }
-    fn find_node_with_code(&self, short: &str) -> Option<FSMRc<RefCell<FSMNode>>> {
+    fn find_node_with_code(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
         let binding = self.get_cur_ast_binding();
         let binding = binding.borrow();
         binding.find_node_with_code(short)
@@ -629,7 +683,7 @@ mod tests {
         assert!(cursor.is_done());
     }
 
-    fn util_check_str(root: &FSMRc<RefCell<FSMNode>>, str: &str) {
+    fn util_check_str(root: &FSMRc<FSMLock<FSMNode>>, str: &str) {
         let mut cursor = FSMCursor::new(root);
         for char in str.chars() {
             cursor.advance(char);
