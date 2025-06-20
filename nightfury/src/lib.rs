@@ -11,6 +11,8 @@ use fsm::{CycleAwareOp, Keyword};
 use regex::Regex;
 #[cfg(not(feature = "thread-safe"))]
 use std::cell::{Ref, RefCell, RefMut};
+#[cfg(feature = "thread-safe")]
+use std::sync::Mutex;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub mod frontend;
@@ -20,12 +22,22 @@ pub use fsm::FSMNodeWrapper;
 
 pub mod protocol;
 
+#[cfg(not(feature = "thread-safe"))]
 static mut CNT: usize = 0;
+#[cfg(feature = "thread-safe")]
+static CNT: Mutex<usize> = Mutex::new(0);
 fn get_id() -> usize {
     let ret;
+    #[cfg(not(feature = "thread-safe"))]
     unsafe {
         ret = CNT;
         CNT += 1;
+    }
+    #[cfg(feature = "thread-safe")]
+    {
+        let mut lock = CNT.lock().expect("CNT lock");
+        ret = *lock;
+        *lock += 1;
     }
     return ret;
 }
