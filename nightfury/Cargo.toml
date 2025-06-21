@@ -24,9 +24,5 @@ path = "src/lib.rs"
 name = "bin"
 path = "src/main.rs"
 
-[[bin]]
-name = "server"
-path = "src/server.rs"
-
 [features]
 thread-safe = []
