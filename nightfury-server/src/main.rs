@@ -1,12 +1,12 @@
 #![feature(if_let_guard)]
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::thread;
 
-use lib::protocol::Request;
+use lib::protocol::{Request, Response};
 use lib::{FSMCursor, FSMNode};
 
 fn handle_client(req: Request, cursor: &mut FSMCursor) {
@@ -43,6 +43,22 @@ fn main() -> std::io::Result<()> {
                                     fsms_clone.read().unwrap().get(&name.as_str()) =>
                             {
                                 cursor = Some(FSMCursor::new(fsm))
+                            }
+                            Request::GetCapabilities => {
+                                stream
+                                    .write(
+                                        serde_json::to_string(&Response::Capabilities(
+                                            fsms_clone
+                                                .read()
+                                                .unwrap()
+                                                .keys()
+                                                .map(|s| String::from(*s))
+                                                .collect(),
+                                        ))
+                                        .unwrap()
+                                        .as_bytes(),
+                                    )
+                                    .unwrap();
                             }
                             _ => {
                                 handle_client(req, &mut cursor.as_mut().expect("didn't call init!"))
