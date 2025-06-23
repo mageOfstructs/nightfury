@@ -145,6 +145,7 @@ impl<T: PartialEq> PartialEq for FSMLock<T> {
 type InternalCursor = FSMWeak<FSMLock<FSMNode>>;
 #[derive(Clone, Debug)]
 pub struct FSMCursor {
+    root: InternalCursor,
     cur_ast_pos: InternalCursor,
     input_buf: String,
     unfinished_nodes: Vec<InternalCursor>,
@@ -153,10 +154,15 @@ pub struct FSMCursor {
 impl FSMCursor {
     pub fn new(fsm_root: &FSMRc<FSMLock<FSMNode>>) -> Self {
         Self {
+            root: FSMRc::downgrade(fsm_root),
             cur_ast_pos: FSMRc::downgrade(fsm_root),
             input_buf: String::new(),
             unfinished_nodes: Vec::new(),
         }
+    }
+    pub fn reset(&mut self) {
+        self.cur_ast_pos = FSMWeak::clone(&self.root);
+        self.input_buf.clear();
     }
     fn handle_userdefined_combo(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
@@ -842,5 +848,18 @@ mod tests {
         assert_eq!(None, cursor2.advance('b'));
         assert_eq!("awa", cursor2.advance('a').unwrap());
         root.borrow().dbg();
+    }
+
+    #[test]
+    fn test_reset() {
+        let root = FSMNode::new_null(None);
+        let other = FSMNode::new_keyword_with_parent("int".to_string(), root.clone());
+        let _other = FSMNode::new_keyword_with_parent("asdf".to_string(), other.clone());
+        assert_eq!(root.borrow().children.len(), 1);
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!("int", cursor.advance('i').unwrap());
+        assert_eq!(None, cursor.advance('i'));
+        cursor.reset();
+        assert_eq!("int", cursor.advance('i').unwrap());
     }
 }
