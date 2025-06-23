@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::process::exit;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::thread;
@@ -43,6 +44,7 @@ const DEFAULT_SOCK_ADDR: &str = "./nightfury.sock";
 fn main() -> std::io::Result<()> {
     ctrlc::set_handler(|| {
         std::fs::remove_file(DEFAULT_SOCK_ADDR).unwrap();
+        exit(1);
     })
     .unwrap();
     let listener = UnixListener::bind("./nightfury.sock")?;
