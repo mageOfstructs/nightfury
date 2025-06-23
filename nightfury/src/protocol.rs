@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{BufRead, ErrorKind, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +21,22 @@ pub enum Response {
 pub trait WriteNullDelimitedExt {
     fn write_with_null(&mut self, data: &[u8]) -> std::io::Result<()>;
     fn write_with_null_flush(&mut self, data: &[u8]) -> std::io::Result<()>;
+}
+
+pub trait ReadUntilNullExt {
+    fn read_until_null(&mut self, buf: &mut String) -> std::io::Result<()>;
+}
+
+impl<S: BufRead> ReadUntilNullExt for S {
+    fn read_until_null(&mut self, buf: &mut String) -> std::io::Result<()> {
+        let mut bytes_buf = Vec::with_capacity(buf.len());
+        self.read_until(0, &mut bytes_buf)?;
+        match str::from_utf8(&bytes_buf) {
+            Ok(str) => buf.push_str(str),
+            Err(_) => return Err(std::io::Error::new(ErrorKind::InvalidInput, "not utf8!")),
+        }
+        Ok(())
+    }
 }
 
 impl<S: Write> WriteNullDelimitedExt for S {
