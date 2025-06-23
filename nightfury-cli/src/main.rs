@@ -18,20 +18,20 @@ struct Args {
     #[arg(short, long)]
     reset: bool,
 
-    /// path to nightfury socket
-    #[arg()]
-    sock_path: String,
-
     /// name of fsm
     #[arg(short, long)]
-    name: String,
+    name: Option<String>,
 
     /// list capabilities
     #[arg(short, long)]
     list: bool,
+
+    /// path to nightfury socket
+    #[arg()]
+    sock_path: String,
 }
 
-fn build_request(req: Request, stream: &mut BufStream<UnixStream>) -> std::io::Result<()> {
+fn send_request(req: Request, stream: &mut BufStream<UnixStream>) -> std::io::Result<()> {
     let msg = serde_json::to_string(&req)?;
     stream.write_with_null_flush(msg.as_bytes())?;
     Ok(())
@@ -44,22 +44,23 @@ fn main() -> std::io::Result<()> {
     let mut stream = BufStream::new(stream);
     println!("Connected!");
     if args.list {
-        build_request(Request::GetCapabilities, &mut stream)?;
+        send_request(Request::GetCapabilities, &mut stream)?;
     }
 
-    build_request(Request::Init(args.name), &mut stream)?;
-    if args.reset {
-        build_request(Request::Reset, &mut stream)?;
+    if let Some(name) = args.name {
+        send_request(Request::Init(name), &mut stream)?;
+        if args.reset {
+            send_request(Request::Reset, &mut stream)?;
+        }
+        if let Some(input) = &args.input
+            && input.len() == 1
+        {
+            send_request(Request::Advance(input.chars().nth(0).unwrap()), &mut stream)?;
+        }
+        if let Some(input) = args.input {
+            send_request(Request::AdvanceStr(input), &mut stream)?;
+        }
     }
-    if let Some(input) = &args.input
-        && input.len() == 1
-    {
-        build_request(Request::Advance(input.chars().nth(0).unwrap()), &mut stream)?;
-    }
-    if let Some(input) = args.input {
-        build_request(Request::AdvanceStr(input), &mut stream)?;
-    }
-    println!("Done writing");
     let mut response = Vec::new();
     stream.read_until(0, &mut response)?;
     println!("{:?}", str::from_utf8(&response[..&response.len() - 1]));
