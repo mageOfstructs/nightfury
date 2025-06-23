@@ -12,11 +12,28 @@ use bufstream::BufStream;
 use lib::protocol::{Request, Response};
 use lib::{FSMCursor, FSMNode};
 
-fn handle_client(req: Request, cursor: &mut FSMCursor) {
+fn handle_request(req: Request, cursor: &mut FSMCursor, stream: &mut BufStream<UnixStream>) {
     match req {
-        Request::Reset => {}
-        Request::Advance(c) => {}
-        Request::AdvanceStr(str) => {}
+        Request::Reset => {
+            cursor.reset();
+        }
+        Request::Advance(c) => match cursor.advance(c) {
+            Some(s) => {
+                stream.write_with_null(
+                    serde_json::to_string(&Response::Expanded(s))
+                        .unwrap()
+                        .as_bytes(),
+                );
+            }
+            None => {
+                stream.write_with_null(serde_json::to_string(&Response::Ok).unwrap().as_bytes());
+            }
+        },
+        Request::AdvanceStr(str) => {
+            str.chars().for_each(|c| {
+                cursor.advance(c);
+            });
+        }
         _ => unreachable!(),
     }
 }
@@ -75,9 +92,11 @@ fn main() -> std::io::Result<()> {
                                     )
                                     .unwrap();
                             }
-                            _ => {
-                                handle_client(req, &mut cursor.as_mut().expect("didn't call init!"))
-                            }
+                            _ => handle_request(
+                                req,
+                                &mut cursor.as_mut().expect("didn't call init!"),
+                                &mut stream,
+                            ),
                         }
                         stream.flush().expect("stream flush");
                     }
