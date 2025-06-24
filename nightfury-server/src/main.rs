@@ -101,11 +101,13 @@ fn main() -> std::io::Result<()> {
                             ),
                         }
                         stream.flush().expect("stream flush");
+                        buf.clear();
                     }
                 }));
             }
             Err(err) => {
                 /* connection failed */
+                eprintln!("{err}");
                 break;
             }
         }
