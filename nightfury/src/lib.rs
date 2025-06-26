@@ -10,10 +10,9 @@ use fsm::NodeType::{self, *};
 use fsm::{CycleAwareOp, Keyword};
 pub use fsm::{FSMNode, ToCSV};
 use regex::Regex;
+use std::cell::RefCell;
 #[cfg(not(feature = "thread-safe"))]
-use std::cell::{Ref, RefCell, RefMut};
-#[cfg(feature = "thread-safe")]
-use std::sync::Mutex;
+use std::cell::{Ref, RefMut};
 #[cfg(feature = "thread-safe")]
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -24,32 +23,17 @@ pub use fsm::FSMNodeWrapper;
 
 pub mod protocol;
 
-#[cfg(not(feature = "thread-safe"))]
 thread_local! {
     static CNT: RefCell<usize> = RefCell::new(0);
 }
 
-#[cfg(feature = "thread-safe")]
-static CNT: Mutex<usize> = Mutex::new(0);
 fn get_id() -> usize {
     let mut ret = 0;
-    #[cfg(not(feature = "thread-safe"))]
-    {
-        CNT.with_borrow(|cnt| ret = *cnt);
-        CNT.with_borrow_mut(|cnt| *cnt += 1);
-    }
-    #[cfg(feature = "thread-safe")]
-    {
-        let mut lock = CNT.lock().expect("CNT lock");
-        ret = *lock;
-        *lock += 1;
-    }
+    CNT.with_borrow(|cnt| ret = *cnt);
+    CNT.with_borrow_mut(|cnt| *cnt += 1);
     return ret;
 }
 fn dbg_id() {
-    #[cfg(feature = "thread-safe")]
-    debug_println!("{:?}", CNT.lock());
-    #[cfg(not(feature = "thread-safe"))]
     debug_println!("{:?}", CNT);
 }
 
