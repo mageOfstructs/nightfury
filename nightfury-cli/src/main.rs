@@ -1,6 +1,11 @@
 use clap::Parser;
+use clap::Subcommand;
 use clap::command;
+use lib::ToCSV;
+use lib::frontend::create_graph_from_ebnf;
+use std::fs::File;
 use std::io::BufRead;
+use std::io::Write;
 use std::os::unix::net::UnixStream;
 
 use bufstream::BufStream;
@@ -27,8 +32,16 @@ struct Args {
     list: bool,
 
     /// path to nightfury socket
-    #[arg()]
     sock_path: String,
+
+    #[command(subcommand)]
+    command: NightfurySubcommand,
+}
+
+#[derive(Subcommand, Debug)]
+enum NightfurySubcommand {
+    /// generates an FSM from a provided ebnf
+    Generate { path: String, out: Option<String> },
 }
 
 fn send_request(req: Request, stream: &mut BufStream<UnixStream>) -> std::io::Result<()> {
@@ -39,6 +52,31 @@ fn send_request(req: Request, stream: &mut BufStream<UnixStream>) -> std::io::Re
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
+
+    match args.command {
+        NightfurySubcommand::Generate { path, out } => match std::fs::read_to_string(path) {
+            Ok(ebnf) => {
+                let out = out.as_ref().map_or("./nightfury.fsm", |s| &s);
+                let root = create_graph_from_ebnf(&ebnf);
+                match root {
+                    Ok(root) => {
+                        let out_file = File::create_new(out);
+                        match out_file {
+                            Ok(mut out_file) => {
+                                out_file.write_all(&root.to_csv().as_bytes())?;
+                            }
+                            Err(e) => eprintln!("{e}"),
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Error creating ebnf:");
+                        eprintln!("{err}");
+                    }
+                }
+            }
+            Err(e) => eprintln!("Error reading file: {e}"),
+        },
+    }
 
     let stream = UnixStream::connect(args.sock_path)?;
     let mut stream = BufStream::new(stream);

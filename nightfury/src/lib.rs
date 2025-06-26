@@ -6,14 +6,15 @@
 #![feature(pattern)]
 
 use debug_print::debug_println;
-pub use fsm::FSMNode;
 use fsm::NodeType::{self, *};
 use fsm::{CycleAwareOp, Keyword};
+pub use fsm::{FSMNode, ToCSV};
 use regex::Regex;
 #[cfg(not(feature = "thread-safe"))]
 use std::cell::{Ref, RefCell, RefMut};
 #[cfg(feature = "thread-safe")]
 use std::sync::Mutex;
+#[cfg(feature = "thread-safe")]
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub mod frontend;
