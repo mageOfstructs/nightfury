@@ -25,15 +25,18 @@ pub use fsm::FSMNodeWrapper;
 pub mod protocol;
 
 #[cfg(not(feature = "thread-safe"))]
-static mut CNT: usize = 0;
+thread_local! {
+    static CNT: RefCell<usize> = RefCell::new(0);
+}
+
 #[cfg(feature = "thread-safe")]
 static CNT: Mutex<usize> = Mutex::new(0);
 fn get_id() -> usize {
-    let ret;
+    let mut ret = 0;
     #[cfg(not(feature = "thread-safe"))]
-    unsafe {
-        ret = CNT;
-        CNT += 1;
+    {
+        CNT.with_borrow(|cnt| ret = *cnt);
+        CNT.with_borrow_mut(|cnt| *cnt += 1);
     }
     #[cfg(feature = "thread-safe")]
     {
@@ -42,6 +45,12 @@ fn get_id() -> usize {
         *lock += 1;
     }
     return ret;
+}
+fn dbg_id() {
+    #[cfg(feature = "thread-safe")]
+    debug_println!("{:?}", CNT.lock());
+    #[cfg(not(feature = "thread-safe"))]
+    debug_println!("{:?}", CNT);
 }
 
 trait PartialMatch {
