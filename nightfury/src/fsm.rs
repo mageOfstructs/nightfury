@@ -726,14 +726,14 @@ pub trait ToCSV {
 
 impl ToCSV for NodeType {
     fn to_csv(&self) -> String {
-        match self {
+        let mut ret = match self {
             Null => "".to_owned(),
             Keyword(Keyword {
                 short,
                 expanded,
                 closing_token,
             }) => format!(
-                "{}\t{}{}\n",
+                "{}\t{}{}",
                 short,
                 expanded,
                 if let Some(ct) = closing_token {
@@ -751,7 +751,9 @@ impl ToCSV for NodeType {
                 )
             }
             _ => panic!("FSMs with deprecated nodes will not be serialized!"),
-        }
+        };
+        ret.push('\n');
+        ret
     }
     fn from_csv(csv: &str) -> Self {
         println!("csv: {csv}");
