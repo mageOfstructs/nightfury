@@ -1,5 +1,6 @@
 use super::FSMRc;
 use std::collections::{HashMap, HashSet};
+use std::str::pattern::Pattern;
 
 use super::FSMLock;
 use super::get_id;
@@ -534,6 +535,16 @@ impl FSMNode {
         self.dbg_internal(0, &mut HashSet::new());
     }
 
+    pub fn new_id(value: NodeType, id: NodeId) -> FSMRc<FSMLock<Self>> {
+        let ret = FSMRc::new(FSMLock::new(Self {
+            value,
+            children: Vec::new(),
+            id,
+            ..Default::default()
+        }));
+        ret
+    }
+
     pub fn new(value: NodeType, parent: &FSMRc<FSMLock<FSMNode>>) -> FSMRc<FSMLock<Self>> {
         let ret = FSMRc::new(FSMLock::new(Self {
             value,
@@ -705,5 +716,179 @@ impl FSMNode {
         self.children
             .iter()
             .for_each(|child| println!("{:?}", child.borrow().value));
+    }
+}
+
+pub trait ToCSV {
+    fn to_csv(&self) -> String;
+    fn from_csv(csv: &str) -> Self;
+}
+
+impl ToCSV for NodeType {
+    fn to_csv(&self) -> String {
+        match self {
+            Null => "".to_owned(),
+            Keyword(Keyword {
+                short,
+                expanded,
+                closing_token,
+            }) => format!(
+                "{}\t{}{}\n",
+                short,
+                expanded,
+                if let Some(ct) = closing_token {
+                    "\t".to_owned() + ct
+                } else {
+                    "".to_owned()
+                }
+            ),
+            UserDefinedCombo(r, cts) => {
+                format!(
+                    "/{}{}",
+                    r.as_str(),
+                    cts.iter()
+                        .fold(String::new(), |acc, el| { format!("{}\t{}", acc, el) })
+                )
+            }
+            _ => panic!("FSMs with deprecated nodes will not be serialized!"),
+        }
+    }
+    fn from_csv(csv: &str) -> Self {
+        println!("csv: {csv}");
+        if csv.len() < 2 {
+            Null
+        } else if csv.chars().nth(0).unwrap() == '/' {
+            let mut iter = csv.split('\t');
+            let regex = Regex::new(&iter.next().expect("invalid NodeType format")[1..])
+                .expect("invalid Regex format");
+            let mut final_tokens = Vec::new();
+            iter.for_each(|ft| final_tokens.push(ft.chars().nth(0).unwrap()));
+            UserDefinedCombo(regex, final_tokens)
+        } else {
+            let parts: Vec<_> = csv.split('\t').collect();
+            if parts.len() < 3 {
+                Keyword(Keyword {
+                    short: parts[0].to_owned(),
+                    expanded: parts[1].to_owned(),
+                    closing_token: None,
+                })
+            } else {
+                Keyword(Keyword {
+                    short: parts[0].to_owned(),
+                    expanded: parts[1].to_owned(),
+                    closing_token: Some(parts[3].to_owned()),
+                })
+            }
+        }
+    }
+}
+
+impl ToCSV for FSMNodeWrapper {
+    fn to_csv(&self) -> String {
+        let mut nodes = HashMap::new();
+        self.walk_fsm_breadth(
+            &mut |_, _, c, _| {
+                nodes.insert(c.borrow().id, c.clone());
+                false
+            },
+            true,
+        );
+        let mut ret = format!("{}\t{}", self.borrow().id, self.borrow().value.to_csv());
+        nodes.keys().for_each(|id| {
+            ret.push_str(&id.to_string());
+            ret.push('\t');
+            ret.push_str(&nodes.get(id).unwrap().borrow().value.to_csv());
+        });
+        ret.push('\n');
+
+        ret.push_str(&self.borrow().id.to_string());
+        self.borrow().children.iter().for_each(|el| {
+            ret.push('\t');
+            ret.push_str(&el.borrow().id.to_string());
+        });
+        ret.push('\n');
+
+        nodes.keys().for_each(|id| {
+            ret.push_str(&id.to_string());
+            let node = nodes.get(id).unwrap();
+            node.borrow().children.iter().for_each(|el| {
+                ret.push('\t');
+                ret.push_str(&el.borrow().id.to_string());
+            });
+            ret.push('\n');
+        });
+        ret
+    }
+    fn from_csv(csv: &str) -> Self {
+        let mut iter = csv.split_indices('\n');
+        let mut nodes = HashMap::new();
+
+        // TODO: refactor
+        let line = iter.next().unwrap();
+        let mut line_iter = line.0.split_indices('\t');
+        let id: usize = line_iter.next().unwrap().0.parse().unwrap();
+        let ntype = NodeType::from_csv(&line.0[line_iter.next().unwrap().1..]);
+
+        let root = FSMNode::new_id(ntype, id);
+        nodes.insert(id, root.clone());
+        while let Some(part) = iter.next()
+            && !part.0.is_empty()
+        {
+            let mut line_iter = part.0.split_indices('\t');
+            let id: usize = line_iter.next().unwrap().0.parse().unwrap();
+            let ntype = NodeType::from_csv(&part.0[line_iter.next().unwrap().1..]);
+            nodes.insert(id, FSMNode::new_id(ntype, id));
+        }
+        // iter.next(); // consume separator line
+
+        // children logic
+        while let Some(part) = iter.next()
+            && !part.0.is_empty()
+        {
+            let mut iter = part.0.split('\t');
+            let id: usize = iter.next().unwrap().parse().unwrap();
+            let parent = nodes.get(&id).unwrap();
+            while let Some(part) = iter.next() {
+                let c_id: NodeId = part.parse().unwrap();
+                FSMNode::add_child_cycle_safe(parent, nodes.get(&c_id).unwrap());
+            }
+        }
+        root
+    }
+}
+
+trait SplitIndicesExt {
+    fn split_indices<P>(&self, pat: P) -> impl Iterator<Item = (&str, usize)>
+    where
+        P: Pattern;
+}
+
+impl SplitIndicesExt for &str {
+    fn split_indices<P>(&self, pat: P) -> impl Iterator<Item = (&str, usize)>
+    where
+        P: Pattern,
+    {
+        let mut start = 0;
+        self.match_indices(pat).map(move |(i, _)| {
+            let ret = (&self[start..i], start);
+            start = i + 1;
+            ret
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_csv_simple() {
+        let root = FSMNode::new_keyword("int".to_string());
+        let _other = FSMNode::new_keyword_with_parent("asdf".to_string(), root.clone());
+
+        let csv = root.to_csv();
+        assert_eq!("0\ti\tint\n1\ta\tasdf\n\n0\t1\n1\n", csv);
+        let new_root = FSMNodeWrapper::from_csv(&csv);
+        assert_eq!(root, new_root);
     }
 }

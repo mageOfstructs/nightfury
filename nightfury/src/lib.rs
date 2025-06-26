@@ -3,6 +3,7 @@
 #![feature(trait_alias)]
 #![feature(impl_trait_in_bindings)]
 #![feature(lock_value_accessors)]
+#![feature(pattern)]
 
 use debug_print::debug_println;
 pub use fsm::FSMNode;
