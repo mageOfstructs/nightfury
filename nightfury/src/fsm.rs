@@ -892,8 +892,6 @@ mod tests {
         let _other = FSMNode::new_keyword_with_parent("asdf".to_string(), root.clone());
 
         let csv = root.to_csv();
-        print!("{csv}");
-        // FIXME: if all testcases get run at the same time, the id gen gets weird
         assert_eq!("0\ti\tint\n1\ta\tasdf\n\n0\t1\n1\n", csv);
         let new_root = FSMNodeWrapper::from_csv(&csv);
         assert_eq!(root, new_root);
