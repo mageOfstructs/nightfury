@@ -416,9 +416,15 @@ impl FSMNode {
     pub fn get_last_child(&self) -> Option<FSMRc<FSMLock<FSMNode>>> {
         self.children.last().cloned()
     }
+    /// adds child to the children vector of self without doing collision checks first
+    pub unsafe fn add_child_unsafe(&mut self, child: &FSMRc<FSMLock<FSMNode>>) {
+        self.children.push(FSMRc::clone(&child));
+    }
     pub fn add_child(&mut self, child: &FSMRc<FSMLock<FSMNode>>) {
         while self.handle_potential_conflict(child) {}
-        self.children.push(FSMRc::clone(&child));
+        unsafe {
+            self.add_child_unsafe(child);
+        }
     }
     pub fn add_child_cycle_safe(this: &FSMRc<FSMLock<FSMNode>>, child: &FSMRc<FSMLock<FSMNode>>) {
         while this.borrow().handle_potential_conflict(child) {}
@@ -852,6 +858,13 @@ impl ToCSV for FSMNodeWrapper {
             let parent = nodes.get(&id).unwrap();
             while let Some(part) = iter.next() {
                 let c_id: NodeId = part.parse().unwrap();
+                #[cfg(not(debug_assertions))]
+                unsafe {
+                    parent
+                        .borrow_mut()
+                        .add_child_unsafe(nodes.get(&c_id).unwrap());
+                }
+                #[cfg(debug_assertions)]
                 FSMNode::add_child_cycle_safe(parent, nodes.get(&c_id).unwrap());
             }
         }
