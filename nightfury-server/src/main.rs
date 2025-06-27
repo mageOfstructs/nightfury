@@ -3,8 +3,8 @@ use lib::protocol::WriteNullDelimitedExt;
 use lib::{FSMNodeWrapper, ToCSV};
 use std::collections::HashMap;
 use std::fs::{File, read_dir};
-use std::io::{BufRead, BufReader, read_to_string};
-use std::io::{Read, Write};
+use std::io::Write;
+use std::io::{BufRead, read_to_string};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::exit;
 use std::sync::Arc;
@@ -15,7 +15,11 @@ use bufstream::BufStream;
 use lib::protocol::{Request, Response};
 use lib::{FSMCursor, FSMNode};
 
-fn handle_request(req: Request, cursor: &mut FSMCursor, stream: &mut BufStream<UnixStream>) {
+fn handle_request(
+    req: Request,
+    cursor: &mut FSMCursor,
+    stream: &mut BufStream<UnixStream>,
+) -> std::io::Result<()> {
     match req {
         Request::Reset => {
             cursor.reset();
@@ -26,10 +30,10 @@ fn handle_request(req: Request, cursor: &mut FSMCursor, stream: &mut BufStream<U
                     serde_json::to_string(&Response::Expanded(s))
                         .unwrap()
                         .as_bytes(),
-                );
+                )?;
             }
             None => {
-                stream.write_with_null(serde_json::to_string(&Response::Ok).unwrap().as_bytes());
+                stream.write_with_null(serde_json::to_string(&Response::Ok).unwrap().as_bytes())?;
             }
         },
         Request::AdvanceStr(str) => {
@@ -39,6 +43,7 @@ fn handle_request(req: Request, cursor: &mut FSMCursor, stream: &mut BufStream<U
         }
         _ => unreachable!(),
     }
+    Ok(())
 }
 
 const DEFAULT_SOCK_ADDR: &str = "./nightfury.sock";
@@ -62,6 +67,12 @@ fn main() -> std::io::Result<()> {
                 Ok(fsm) => {
                     let mut fsms = fsms.write().unwrap();
                     let file_name = fsm.file_name();
+                    // if let Some(file_name) = file_name.to_str()
+                    //     && let Ok(file) = File::open(&file_name)
+                    //     && let Ok(csv) = read_to_string(file)
+                    // {
+                    //     fsms.insert(file_name.to_string(), FSMNodeWrapper::from_csv(&csv));
+                    // }
                     match file_name.to_str() {
                         Some(fsm_name) => {
                             fsms.insert(
@@ -109,31 +120,28 @@ fn main() -> std::io::Result<()> {
                             {
                                 cursor = Some(FSMCursor::new(fsm))
                             }
-                            Request::GetCapabilities => {
-                                stream
-                                    .write_with_null(
-                                        serde_json::to_string(&Response::Capabilities(
-                                            fsms_clone
-                                                .read()
-                                                .unwrap()
-                                                .keys()
-                                                .map(|s| String::from(s))
-                                                .collect(),
-                                        ))
+                            Request::GetCapabilities => stream.write_with_null(
+                                serde_json::to_string(&Response::Capabilities(
+                                    fsms_clone
+                                        .read()
                                         .unwrap()
-                                        .as_bytes(),
-                                    )
-                                    .unwrap();
-                            }
+                                        .keys()
+                                        .map(|s| String::from(s))
+                                        .collect(),
+                                ))
+                                .unwrap()
+                                .as_bytes(),
+                            )?,
                             _ => handle_request(
                                 req,
                                 &mut cursor.as_mut().expect("didn't call init!"),
                                 &mut stream,
-                            ),
+                            )?,
                         }
                         stream.flush().expect("stream flush");
                         buf.clear();
                     }
+                    std::io::Result::<()>::Ok(())
                 }));
             }
             Err(err) => {
@@ -144,7 +152,9 @@ fn main() -> std::io::Result<()> {
         }
     }
     handles.into_iter().for_each(|h| {
-        h.join().unwrap();
+        if let Err(err) = h.join().unwrap() {
+            eprintln!("join: {err}");
+        }
     });
     Ok(())
 }
