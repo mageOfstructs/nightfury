@@ -1,13 +1,15 @@
 #![feature(if_let_guard)]
 use lib::protocol::WriteNullDelimitedExt;
+use lib::{FSMNodeWrapper, ToCSV};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::fs::{File, read_dir};
+use std::io::{BufRead, BufReader, read_to_string};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::exit;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::thread;
+use std::{env, thread};
 
 use bufstream::BufStream;
 use lib::protocol::{Request, Response};
@@ -52,7 +54,36 @@ fn main() -> std::io::Result<()> {
     let fsms = Arc::new(RwLock::new(HashMap::new()));
     fsms.write()
         .unwrap()
-        .insert("test", FSMNode::new_null(None));
+        .insert("test".to_string(), FSMNode::new_null(None));
+
+    if let Ok(dir) = env::var("NIGHTFURY_FSMDIR") {
+        for fsm in read_dir(dir)? {
+            match fsm {
+                Ok(fsm) => {
+                    let mut fsms = fsms.write().unwrap();
+                    let file_name = fsm.file_name();
+                    match file_name.to_str() {
+                        Some(fsm_name) => {
+                            fsms.insert(
+                                fsm_name.to_string(),
+                                // TODO: cleanup
+                                FSMNodeWrapper::from_csv(
+                                    &read_to_string(File::open(fsm.path()).unwrap()).unwrap(),
+                                ),
+                            );
+                        }
+                        None => {
+                            eprintln!("Filename isn't valid Unicode!");
+                        }
+                    }
+                }
+                Err(err) => {
+                    eprintln!("Error reading fsm dir entry:");
+                    eprint!("{err}");
+                }
+            }
+        }
+    }
 
     // accept connections and process them, spawning a new thread for each one
     for stream in listener.incoming() {
@@ -74,7 +105,7 @@ fn main() -> std::io::Result<()> {
                         match req {
                             Request::Init(ref name)
                                 if let Some(fsm) =
-                                    fsms_clone.read().unwrap().get(&name.as_str()) =>
+                                    fsms_clone.read().unwrap().get(&*name.as_str()) =>
                             {
                                 cursor = Some(FSMCursor::new(fsm))
                             }
@@ -86,7 +117,7 @@ fn main() -> std::io::Result<()> {
                                                 .read()
                                                 .unwrap()
                                                 .keys()
-                                                .map(|s| String::from(*s))
+                                                .map(|s| String::from(s))
                                                 .collect(),
                                         ))
                                         .unwrap()
