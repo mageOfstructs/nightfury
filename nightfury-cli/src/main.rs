@@ -1,6 +1,7 @@
 use clap::Parser;
 use clap::Subcommand;
 use clap::command;
+use debug_print::debug_println;
 use lib::ToCSV;
 use lib::frontend::create_graph_from_ebnf;
 use std::fs::File;
@@ -56,6 +57,7 @@ enum NightfurySubcommand {
 
 fn send_request(req: Request, stream: &mut BufStream<UnixStream>) -> std::io::Result<()> {
     let msg = serde_json::to_string(&req)?;
+    dbg!(&msg);
     stream.write_with_null_flush(msg.as_bytes())?;
     Ok(())
 }
@@ -115,8 +117,7 @@ fn main() -> std::io::Result<()> {
                     && input.len() == 1
                 {
                     send_request(Request::Advance(input.chars().nth(0).unwrap()), &mut stream)?;
-                }
-                if let Some(input) = input {
+                } else if let Some(input) = input {
                     send_request(Request::AdvanceStr(input), &mut stream)?;
                 }
             }
