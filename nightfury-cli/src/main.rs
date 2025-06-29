@@ -1,12 +1,10 @@
 use clap::Parser;
 use clap::Subcommand;
 use clap::command;
-use debug_print::debug_println;
 use lib::ToCSV;
 use lib::frontend::create_graph_from_ebnf;
 use std::fs::File;
 use std::io::BufRead;
-use std::io::Read;
 use std::io::Write;
 use std::io::read_to_string;
 use std::io::stdin;
