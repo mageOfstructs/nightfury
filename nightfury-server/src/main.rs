@@ -47,7 +47,25 @@ fn handle_request(
     Ok(())
 }
 
-const DEFAULT_SOCK_ADDR: &str = "./nightfury.sock";
+const DEFAULT_SOCK_ADDR: &str = ".";
+fn get_sock_path() -> String {
+    if let Ok(path) = env::var("XDG_RUNTIME_DIR") {
+        return path;
+    }
+    if let Ok(euid) = env::var("EUID") {
+        let default_rtd = format!("/run/user/{euid}");
+        if std::path::Path::new(&default_rtd).is_dir() {
+            return default_rtd;
+        }
+    }
+    DEFAULT_SOCK_ADDR.to_string()
+}
+
+fn get_sock_addr() -> String {
+    let mut dir = get_sock_path();
+    dir.push_str("/nightfury.sock");
+    dir
+}
 
 fn main() -> std::io::Result<()> {
     ctrlc::set_handler(|| {
@@ -55,7 +73,7 @@ fn main() -> std::io::Result<()> {
         exit(1);
     })
     .unwrap();
-    let listener = UnixListener::bind("./nightfury.sock")?;
+    let listener = UnixListener::bind(get_sock_addr())?;
     let mut handles = Vec::new();
     let fsms = Arc::new(RwLock::new(HashMap::new()));
 
