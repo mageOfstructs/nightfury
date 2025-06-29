@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "nightfury-vscode.helloWorld",
-        "title": "Hello World"
+        "command": "nightfury-vscode.getCapabilities",
+        "title": "Get Capabilities"
       }
     ]
   },
