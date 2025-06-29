@@ -1,6 +1,7 @@
 #![feature(if_let_guard)]
 use lib::protocol::WriteNullDelimitedExt;
-use lib::{FSMNodeWrapper, ToCSV};
+use lib::{FSMNodeWrapper, ToCSV, get_test_fsm};
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs::{File, read_dir};
 use std::io::Write;
@@ -57,9 +58,10 @@ fn main() -> std::io::Result<()> {
     let listener = UnixListener::bind("./nightfury.sock")?;
     let mut handles = Vec::new();
     let fsms = Arc::new(RwLock::new(HashMap::new()));
+
     fsms.write()
         .unwrap()
-        .insert("test".to_string(), FSMNode::new_null(None));
+        .insert("c".to_string(), get_test_fsm());
 
     if let Ok(dir) = env::var("NIGHTFURY_FSMDIR") {
         for fsm in read_dir(dir)? {
@@ -110,9 +112,9 @@ fn main() -> std::io::Result<()> {
                     let mut cursor = None;
                     while stream.read_until(0, &mut buf).expect("buf read") != 0 {
                         let str = str::from_utf8(&buf[..&buf.len() - 1]).unwrap();
-                        println!("{str}");
+                        println!("str: {str}");
                         let req: Request = serde_json::from_str(str).expect("deserde");
-                        println!("{req:?}");
+                        println!("req: {req:?}");
                         match req {
                             Request::Init(ref name)
                                 if let Some(fsm) =

@@ -58,6 +58,22 @@ impl PartialMatch for Regex {
     }
 }
 
+pub fn get_test_fsm() -> FSMNodeWrapper {
+    let root = FSMNode::new_null(None);
+    let mut sign_token = NodeType::Keyword(Keyword::new("unsigned".to_string(), None));
+    let child = FSMNode::new(sign_token.clone(), &root);
+    sign_token = NodeType::Keyword(Keyword::new("signed".to_string(), None));
+
+    let child2 = FSMNode::new(sign_token, &root);
+    let types = FSMNode::new_required(NodeType::Null, &child);
+
+    let int = FSMNode::new_keyword_with_parent("int".to_string(), types.clone());
+    let float = FSMNode::new_keyword_with_parent("short".to_string(), types.clone());
+    child.borrow_mut().add_child(&types);
+    child2.borrow_mut().add_child(&types);
+    root
+}
+
 // ironic that this only expands names
 struct NameShortener;
 impl NameShortener {
