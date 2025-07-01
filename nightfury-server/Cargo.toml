@@ -1,5 +1,7 @@
 [package]
 name = "nightfury-server"
+description = "Server which provides access to the nightfury project via unix sockets"
+license = "GPL-3.0-only"
 version = "0.1.0"
 edition = "2024"
 
