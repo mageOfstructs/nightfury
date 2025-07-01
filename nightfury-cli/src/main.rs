@@ -30,7 +30,8 @@ enum NightfurySubcommand {
         #[arg(short, long)]
         out: Option<String>,
     },
-    /// send requests to the server
+    /// (debug) send requests to a server instance; NOTE: there is currently no way of retaining state
+    /// between calls.
     Send {
         /// input to enter into fsm
         #[arg(short, long)]
