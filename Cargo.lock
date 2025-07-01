@@ -233,7 +233,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "nightfury"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "console",
  "debug_print",
@@ -250,7 +250,6 @@ version = "0.1.0"
 dependencies = [
  "bufstream",
  "clap",
- "debug_print",
  "nightfury",
  "serde_json",
 ]
