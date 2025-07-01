@@ -45,5 +45,6 @@ The indentation shows you the general flow of the graph. If you see a "Cycle to 
 
 ## Architecture
 
-- `lib` crate: actual logic, largely client-independent
-- `bin` crate: demo app, will be made into an example in the future
+- `nightfury`: the main lib crate; provides the main API for completions
+- `nigthfury-server`: server frontend that can take commands in JSON-Format over a UNIX socket and manipulate the internal FSMs
+- `nightfury-cli`: cli containing helper methods for generating nightfury fsms as well as server debugging
