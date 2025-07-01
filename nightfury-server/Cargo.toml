@@ -8,6 +8,6 @@ edition = "2024"
 [dependencies]
 bufstream = "0.1.4"
 ctrlc = "3.4.7"
-nightfury = {path = "../nightfury", features = ["thread-safe"]}
+nightfury = {path = "../nightfury", features = ["thread-safe"], version = "0.3.0"}
 serde = "1.0.219"
 serde_json = "1.0.140"
