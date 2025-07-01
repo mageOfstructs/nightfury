@@ -1,9 +1,11 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use debug_print::debug_println;
 use ebnf::{Expression, Grammar, Node, RegexExtKind, SymbolKind};
 use regex::Regex;
 
+use super::FSMLock;
+use super::FSMRc;
 use crate::FSMNode;
 
 pub fn print_parsed_ebnf(syntax: &str) {
@@ -21,16 +23,15 @@ enum TerminalState {
 fn handle_node(
     grammar: &Grammar,
     cur_node: &Node,
-    cur_root: &Rc<RefCell<FSMNode>>,
-    terminals: &mut HashMap<String, (Rc<RefCell<FSMNode>>, TerminalState)>,
-) -> Rc<RefCell<FSMNode>> {
+    cur_root: &FSMRc<FSMLock<FSMNode>>,
+    terminals: &mut HashMap<String, (FSMRc<FSMLock<FSMNode>>, TerminalState)>,
+) -> FSMRc<FSMLock<FSMNode>> {
     debug_println!("handle_node got {:?}", cur_node);
     let ret = match &cur_node {
-        Node::String(str) => FSMNode::new_keyword_with_parent(str.to_string(), Rc::clone(cur_root)),
-        Node::RegexString(r) => FSMNode::new(
-            crate::NodeType::UserDefinedRegex(Regex::new(r).unwrap()),
-            &cur_root,
-        ),
+        Node::String(str) => {
+            FSMNode::new_keyword_with_parent(str.to_string(), FSMRc::clone(cur_root))
+        }
+        Node::RegexString(r) => FSMNode::new_userdef(Regex::new(r).unwrap(), cur_root),
         Node::Terminal(name) => {
             if terminals.contains_key(name) {
                 debug_println!("Found {name} in cache!");
@@ -55,12 +56,12 @@ fn handle_node(
                 debug_println!("term_root: {}", term_root.borrow().short_id());
                 terminals.insert(
                     name.to_string(),
-                    (Rc::clone(&term_root), TerminalState::Stub),
+                    (FSMRc::clone(&term_root), TerminalState::Stub),
                 );
                 handle_node(grammar, &terminal.rhs, &term_root, terminals);
                 terminals.insert(
                     name.to_string(),
-                    (Rc::clone(&term_root), TerminalState::Created),
+                    (FSMRc::clone(&term_root), TerminalState::Created),
                 );
                 debug_println!("Finish terminal");
                 debug_println!("young {}:", name);
@@ -135,7 +136,7 @@ fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expressi
     grammer.expressions.iter().find(|expr| expr.lhs == name)
 }
 
-pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<FSMNode>>, String> {
+pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<FSMLock<FSMNode>>, String> {
     match ebnf::get_grammar(ebnf) {
         Ok(grammar) => {
             let root = FSMNode::new_null(None);
@@ -150,6 +151,7 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<Rc<RefCell<FSMNode>>, String
             // sanity op, is_done() won't cancel preemptively
             FSMNode::add_child_to_all_leaves(&root, &FSMNode::new_null(None));
             FSMNode::minify(&root);
+            FSMNode::set_userdef_links(&root);
             debug_println!("Total node cnt: {}", FSMNode::node_cnt(&root));
             // for (name, term) in terminals.iter() {
             //     println!("Term {}", name);

@@ -1,0 +1,12 @@
+[package]
+name = "nightfury-cli"
+description = "cli providing a bunch of helpful commands for working with nigthfury"
+license = "GPL-3.0-only"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bufstream = "0.1.4"
+clap = { version = "4.5.40", features = ["derive"] }
+nightfury = {path = "../nightfury", version = "0.3.0"}
+serde_json = "1.0.140"

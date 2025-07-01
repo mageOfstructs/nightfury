@@ -1,21 +1,3 @@
-[package]
-name = "nightfury"
-description = "(DRAFT) toothless is here to help you write code blazingly fast"
-license = "GPL-3.0-only"
-repository = "https://github.com/mageOfStructs/nightfury"
-version = "0.2.0"
-edition = "2024"
-
-[dependencies]
-console = "0.15.11"
-debug_print = "1.0.0"
-regex = "1.11.1"
-ebnf = "0.1.4"
-
-[lib]
-name = "lib"
-path = "src/lib.rs"
-
-[[bin]]
-name = "bin"
-path = "src/main.rs"
+[workspace]
+resolver = "3"
+members = ["nightfury", "nightfury-cli", "nightfury-server"]
