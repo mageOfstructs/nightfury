@@ -3,7 +3,7 @@ name = "nightfury"
 description = "(DRAFT) toothless is here to help you write code blazingly fast"
 license = "GPL-3.0-only"
 repository = "https://github.com/mageOfStructs/nightfury"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 default-run = "bin"
 
