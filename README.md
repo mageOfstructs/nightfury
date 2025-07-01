@@ -15,10 +15,8 @@ To at least try to be language-independent, the project uses the `ebnf` parser c
 
 ## Features
 
-- [ ] EBNF-based tree generator
-  - constructs seem to work fine on their own
-  - needs more testing to catch edge cases when combining
-- [ ] IDE-independent client-server architecture
+- [x] EBNF-based tree generator
+- [x] IDE-independent client-server architecture
 - [ ] lots of customization-potential
 
 ## Running
