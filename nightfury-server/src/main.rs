@@ -67,13 +67,19 @@ fn get_sock_addr() -> String {
     dir
 }
 
+fn cleanup(sock_addr: &str) {
+    std::fs::remove_file(&sock_addr).unwrap();
+}
+
 fn main() -> std::io::Result<()> {
-    ctrlc::set_handler(|| {
-        std::fs::remove_file(DEFAULT_SOCK_ADDR).unwrap();
+    let sock_addr = get_sock_addr();
+    let sock_addr_clone = sock_addr.clone();
+    ctrlc::set_handler(move || {
+        cleanup(&sock_addr_clone);
         exit(1);
     })
     .unwrap();
-    let listener = UnixListener::bind(get_sock_addr())?;
+    let listener = UnixListener::bind(&sock_addr)?;
     let mut handles = Vec::new();
     let fsms = Arc::new(RwLock::new(HashMap::new()));
 
@@ -176,5 +182,6 @@ fn main() -> std::io::Result<()> {
             eprintln!("join: {err}");
         }
     });
+    cleanup(&sock_addr);
     Ok(())
 }
