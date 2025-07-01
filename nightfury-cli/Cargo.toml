@@ -1,5 +1,7 @@
 [package]
 name = "nightfury-cli"
+description = "cli providing a bunch of helpful commands for working with nigthfury"
+license = "GPL-3.0-only"
 version = "0.1.0"
 edition = "2024"
 
