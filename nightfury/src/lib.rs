@@ -446,7 +446,18 @@ impl FSMCursor {
         None
     }
 
+    pub fn revert(&mut self) {
+        if self.input_buf.is_empty()
+            && let Some(new_cursor_pos) = self.path.pop()
+        {
+            self.cur_ast_pos = new_cursor_pos;
+        } else if !self.input_buf.is_empty() {
+            self.input_buf.pop();
+        }
+    }
+
     fn update_cursor(&mut self, node: &FSMRc<FSMLock<FSMNode>>) {
+        self.path.push(self.cur_ast_pos.clone());
         self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(&node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
@@ -883,6 +894,20 @@ mod tests {
         cursor.reset();
         assert_eq!("int", cursor.advance('i').unwrap());
     }
+
+    #[test]
+    fn test_revert() {
+        let root = FSMNode::new_null(None);
+        let other = FSMNode::new_keyword_with_parent("int".to_string(), root.clone());
+        let _other = FSMNode::new_keyword_with_parent("asdf".to_string(), other.clone());
+        let mut cursor = FSMCursor::new(&root);
+
+        assert_eq!("int", cursor.advance('i').unwrap());
+        assert_eq!("asdf", cursor.advance('a').unwrap());
+        cursor.revert();
+        assert_eq!("asdf", cursor.advance('a').unwrap());
+    }
+
     #[test]
     fn test_dead_end_prevention() {
         let root = FSMNode::new_null(None);
