@@ -154,12 +154,13 @@ impl<T: PartialEq> PartialEq for FSMLock<T> {
     }
 }
 type InternalCursor = FSMWeak<FSMLock<FSMNode>>;
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FSMCursor {
     root: InternalCursor,
     cur_ast_pos: InternalCursor,
     input_buf: String,
     unfinished_nodes: Vec<InternalCursor>,
+    path: Vec<InternalCursor>,
 }
 
 impl FSMCursor {
@@ -167,8 +168,7 @@ impl FSMCursor {
         Self {
             root: FSMRc::downgrade(fsm_root),
             cur_ast_pos: FSMRc::downgrade(fsm_root),
-            input_buf: String::new(),
-            unfinished_nodes: Vec::new(),
+            ..Default::default()
         }
     }
     pub fn reset(&mut self) {
