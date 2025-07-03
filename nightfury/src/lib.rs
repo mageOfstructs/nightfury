@@ -154,12 +154,13 @@ impl<T: PartialEq> PartialEq for FSMLock<T> {
     }
 }
 type InternalCursor = FSMWeak<FSMLock<FSMNode>>;
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FSMCursor {
     root: InternalCursor,
     cur_ast_pos: InternalCursor,
     input_buf: String,
     unfinished_nodes: Vec<InternalCursor>,
+    path: Vec<InternalCursor>,
 }
 
 impl FSMCursor {
@@ -167,8 +168,7 @@ impl FSMCursor {
         Self {
             root: FSMRc::downgrade(fsm_root),
             cur_ast_pos: FSMRc::downgrade(fsm_root),
-            input_buf: String::new(),
-            unfinished_nodes: Vec::new(),
+            ..Default::default()
         }
     }
     pub fn reset(&mut self) {
@@ -201,6 +201,11 @@ impl FSMCursor {
             );
             ret
         } else {
+            if let UserDefinedCombo(r, _) = self.get_current_nodeval()
+                && !r.is_match(&self.input_buf)
+            {
+                self.input_buf.pop();
+            }
             None
         }
     }
@@ -250,15 +255,15 @@ impl FSMCursor {
         )
     }
     pub fn search_rec(
-        &self,
+        &mut self,
         treenode: &FSMRc<FSMLock<FSMNode>>,
     ) -> Option<FSMRc<FSMLock<FSMNode>>> {
         self.search_rec_internal(treenode, false)
     }
     pub fn search_rec_internal(
-        &self,
+        &mut self,
         treenode: &FSMRc<FSMLock<FSMNode>>,
-        best_effort: bool,
+        best_effort: bool, // overcomplicates things (and is probably not even used)
     ) -> Option<FSMRc<FSMLock<FSMNode>>> {
         debug_println!(
             "search_rec at {:?} {}",
@@ -270,7 +275,6 @@ impl FSMCursor {
         let mut potential_matches = 0;
         let mut visited_keywords = 0;
         let mut last_keyword = None;
-        // TODO: this one relies on buggy behavior from the old function!
         treenode.walk_fsm_allow_cycle_to_self(
             &mut |_, _, child, _| {
                 let node_val = &child.borrow().value;
@@ -316,6 +320,12 @@ impl FSMCursor {
         let userdef_match = self.search_for_userdefs(treenode);
         if userdef_match.is_some() {
             return userdef_match;
+        }
+
+        // if we didn't find any potential keywords/userdef nodes
+        if potential_matches == 0 {
+            // don't like that this function has to take a &mut self just because of this
+            self.input_buf.pop();
         }
         None
     }
@@ -436,7 +446,18 @@ impl FSMCursor {
         None
     }
 
+    pub fn revert(&mut self) {
+        if self.input_buf.is_empty()
+            && let Some(new_cursor_pos) = self.path.pop()
+        {
+            self.cur_ast_pos = new_cursor_pos;
+        } else if !self.input_buf.is_empty() {
+            self.input_buf.pop();
+        }
+    }
+
     fn update_cursor(&mut self, node: &FSMRc<FSMLock<FSMNode>>) {
+        self.path.push(self.cur_ast_pos.clone());
         self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(&node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
@@ -872,5 +893,52 @@ mod tests {
         assert_eq!(None, cursor.advance('i'));
         cursor.reset();
         assert_eq!("int", cursor.advance('i').unwrap());
+    }
+
+    #[test]
+    fn test_revert() {
+        let root = FSMNode::new_null(None);
+        let other = FSMNode::new_keyword_with_parent("int".to_string(), root.clone());
+        let _other = FSMNode::new_keyword_with_parent("asdf".to_string(), other.clone());
+        let mut cursor = FSMCursor::new(&root);
+
+        assert_eq!("int", cursor.advance('i').unwrap());
+        assert_eq!("asdf", cursor.advance('a').unwrap());
+        cursor.revert();
+        assert_eq!("asdf", cursor.advance('a').unwrap());
+    }
+
+    #[test]
+    fn test_dead_end_prevention() {
+        let root = FSMNode::new_null(None);
+        let other = FSMNode::new_keyword_with_parent("int".to_string(), root.clone());
+        let _other = FSMNode::new_keyword_with_parent("asdf".to_string(), other.clone());
+        let mut cursor = FSMCursor::new(&root);
+
+        assert_eq!("int", cursor.advance('i').unwrap());
+        assert_eq!(None, cursor.advance('i'));
+        assert_eq!(None, cursor.advance('?'));
+        assert_eq!("asdf", cursor.advance('a').unwrap());
+    }
+    #[test]
+    fn test_dead_end_prevention_userdef() {
+        let ebnf = r"
+        t1 ::= ( #'[0-9]' 'asdf' ) | ( #'[a-z]' 'test' );
+        ";
+        let root = create_graph_from_ebnf(ebnf).unwrap();
+        let mut cursor = FSMCursor::new(&root);
+
+        assert_eq!(None, cursor.advance('0'));
+        assert_eq!("asdf", cursor.advance('a').unwrap());
+        cursor.reset();
+        assert_eq!(None, cursor.advance('a'));
+        assert_eq!("test", cursor.advance('t').unwrap());
+        cursor.reset();
+        assert_eq!(None, cursor.advance('A'));
+        assert_eq!(None, cursor.advance('B'));
+        assert_eq!(None, cursor.advance('!'));
+
+        assert_eq!(None, cursor.advance('a'));
+        assert_eq!("test", cursor.advance('t').unwrap());
     }
 }
