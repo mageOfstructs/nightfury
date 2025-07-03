@@ -641,7 +641,7 @@ impl FSMNode {
     }
 
     fn get_conflicting_node(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
-        self.walk_fsm_breadth(
+        let res = self.walk_fsm_breadth(
             &mut |_, _, child, _| {
                 println!("awa?");
                 match &child.value {
@@ -652,7 +652,9 @@ impl FSMNode {
                 }
             },
             false,
-        )
+        );
+        debug_println!("get_conflicting_node finish");
+        res
     }
     fn handle_potential_conflict_internal(&self, child: &FSMRc<FSMLock<FSMNode>>) -> bool {
         let child_borrow = child.borrow();
@@ -838,18 +840,26 @@ impl ToCSV for FSMNodeWrapper {
 
         // TODO: refactor
         let line = iter.next().unwrap();
+        println!("from_csv at line '{line:?}'");
         let mut line_iter = line.0.split_indices('\t');
         let id: usize = line_iter.next().unwrap().0.parse().unwrap();
-        let ntype = NodeType::from_csv(&line.0[line_iter.next().unwrap().1..]);
+        let ntype = match line_iter.next() {
+            Some(nval) => NodeType::from_csv(&line.0[nval.1..]),
+            None => Null,
+        };
 
         let root = FSMNode::new_id(ntype, id);
         nodes.insert(id, root.clone());
         while let Some(part) = iter.next()
             && !part.0.is_empty()
         {
+            println!("from_csv at line '{part:?}'");
             let mut line_iter = part.0.split_indices('\t');
             let id: usize = line_iter.next().unwrap().0.parse().unwrap();
-            let ntype = NodeType::from_csv(&part.0[line_iter.next().unwrap().1..]);
+            let ntype = match line_iter.next() {
+                Some(nval) => NodeType::from_csv(&part.0[nval.1..]),
+                None => Null,
+            };
             nodes.insert(id, FSMNode::new_id(ntype, id));
         }
         // iter.next(); // consume separator line
