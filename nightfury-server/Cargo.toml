@@ -2,12 +2,12 @@
 name = "nightfury-server"
 description = "Server which provides access to the nightfury project via unix sockets"
 license = "GPL-3.0-only"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
 bufstream = "0.1.4"
 ctrlc = "3.4.7"
-nightfury = {path = "../nightfury", features = ["thread-safe"], version = "0.3.0"}
+nightfury = {path = "../nightfury", features = ["thread-safe"], version = "0.3.1"}
 serde = "1.0.219"
 serde_json = "1.0.140"

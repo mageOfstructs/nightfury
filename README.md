@@ -15,10 +15,8 @@ To at least try to be language-independent, the project uses the `ebnf` parser c
 
 ## Features
 
-- [ ] EBNF-based tree generator
-  - constructs seem to work fine on their own
-  - needs more testing to catch edge cases when combining
-- [ ] IDE-independent client-server architecture
+- [x] EBNF-based tree generator
+- [x] IDE-independent client-server architecture
 - [ ] lots of customization-potential
 
 ## Running
@@ -47,5 +45,6 @@ The indentation shows you the general flow of the graph. If you see a "Cycle to 
 
 ## Architecture
 
-- `lib` crate: actual logic, largely client-independent
-- `bin` crate: demo app, will be made into an example in the future
+- `nightfury`: the main lib crate; provides the main API for completions
+- `nigthfury-server`: server frontend that can take commands in JSON-Format over a UNIX socket and manipulate the internal FSMs
+- `nightfury-cli`: cli containing helper methods for generating nightfury fsms as well as server debugging
