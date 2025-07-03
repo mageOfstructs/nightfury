@@ -73,6 +73,8 @@ fn cleanup(sock_addr: &str) {
 
 fn main() -> std::io::Result<()> {
     let sock_addr = get_sock_addr();
+    // if the server panicked and didn't cleanup, do that now
+    let _ = std::fs::remove_file(&sock_addr);
     let sock_addr_clone = sock_addr.clone();
     ctrlc::set_handler(move || {
         cleanup(&sock_addr_clone);
@@ -87,8 +89,9 @@ fn main() -> std::io::Result<()> {
         .unwrap()
         .insert("c".to_string(), get_test_fsm());
 
-    if let Ok(dir) = env::var("NIGHTFURY_FSMDIR") {
-        for fsm in read_dir(dir)? {
+    let fsm_dir = env::var("NIGHTFURY_FSMDIR").unwrap_or("./nightfury_fsms".to_string());
+    if std::path::Path::new(&fsm_dir).is_dir() {
+        for fsm in read_dir(fsm_dir)? {
             match fsm {
                 Ok(fsm) => {
                     let mut fsms = fsms.write().unwrap();
@@ -101,8 +104,13 @@ fn main() -> std::io::Result<()> {
                     // }
                     match file_name.to_str() {
                         Some(fsm_name) => {
+                            let mut fsm_name = fsm_name.to_string();
+                            if fsm_name.ends_with(".fsm") {
+                                fsm_name = fsm_name[..fsm_name.len() - 4].to_string();
+                            }
+                            println!("Loaded fsm '{fsm_name}'");
                             fsms.insert(
-                                fsm_name.to_string(),
+                                fsm_name,
                                 // TODO: cleanup
                                 FSMNodeWrapper::from_csv(
                                     &read_to_string(File::open(fsm.path()).unwrap()).unwrap(),
