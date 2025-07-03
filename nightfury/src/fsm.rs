@@ -53,8 +53,8 @@ where
         let mut c_idx = 0;
         for child in children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
-                visited_nodes.insert(child.borrow().id);
                 if depth_search {
+                    visited_nodes.insert(child.borrow().id);
                     if (greedy || child.borrow().is_null())
                         && let Some(child) = child.borrow().walk_fsm_internal(
                             op,
@@ -75,12 +75,17 @@ where
         if !depth_search {
             for child in children.iter() {
                 if (greedy || child.borrow().is_null())
-                    && let Some(child) =
+                    && !visited_nodes.contains(&child.borrow().id)
+                {
+                    visited_nodes.insert(child.borrow().id);
+
+                    if let Some(child) =
                         child
                             .borrow()
                             .walk_fsm_internal(op, greedy, depth_search, visited_nodes)
-                {
-                    return Some(child);
+                    {
+                        return Some(child);
+                    }
                 }
             }
         }
