@@ -50,9 +50,11 @@ function insertExpansion(expaned: String) {
     editor.edit((editBuilder) => {
       const curPos = editor.selection.active;
       const range = document.getWordRangeAtPosition(curPos);
-      if (range) {
+      // hack to keep userdefineds from being overwritten
+      // probably need a new protocol message saying the userdefined was completed
+      if (range && expaned.startsWith(document.getText(range))) {
         editBuilder.replace(range, expaned + " ");
-      } else {
+      } else if (!range) {
         console.warn("Range is undefined!");
       }
     });
@@ -61,6 +63,7 @@ function insertExpansion(expaned: String) {
 
 function handleResponse(raw: String) {
   const response = JSON.parse(raw.substring(0, raw.length - 1));
+  console.log(response);
   if (response === "Ok") {
     console.log("Last request succeeded!");
     return;
@@ -116,7 +119,7 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.workspace.onDidChangeTextDocument(function(event) {
         for (const contentChange of event.contentChanges) {
           const textAdded = contentChange.text.trim();
-          if (textAdded.length == 0) {
+          if (textAdded.length === 0) {
             continue;
           }
 
