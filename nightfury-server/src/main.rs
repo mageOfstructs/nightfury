@@ -91,6 +91,10 @@ fn main() -> std::io::Result<()> {
                 Ok(fsm) => {
                     let mut fsms = fsms.write().unwrap();
                     let file_name = fsm.file_name();
+                    #[cfg(debug_assertions)]
+                    if file_name == ".gitkeep" {
+                        continue;
+                    }
                     // if let Some(file_name) = file_name.to_str()
                     //     && let Ok(file) = File::open(&file_name)
                     //     && let Ok(csv) = read_to_string(file)
