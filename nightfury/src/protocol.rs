@@ -1,15 +1,8 @@
-use std::io::{BufRead, ErrorKind, Read, Write};
+use std::error::Error;
+use std::fmt::Display;
+use std::io::{self, BufRead, ErrorKind, Read, Write};
 
 use serde::{Deserialize, Serialize};
-
-// #[derive(Serialize, Deserialize, Debug)]
-// pub enum Request {
-//     Init(String),
-//     GetCapabilities,
-//     Advance(char),
-//     AdvanceStr(String),
-//     Reset,
-// }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
@@ -52,34 +45,44 @@ impl<S: Write> WriteNullDelimitedExt for S {
     }
 }
 
+#[derive(Debug)]
 #[repr(u8)]
-enum Request {
+pub enum Request {
     GetCapabilities,
     InstallLanguage(String, Option<String>),
-    Initialize(String),
     Revert,
     Reset,
+    Initialize(String),
     SetCursor(u16),
 }
 
 #[derive(Debug)]
-enum RequestParseError {
+pub enum RequestParseError {
     Empty,
     InvalidControlCode,
     InvalidEncoding,
 }
 
-const MAX_REQ_CONTROL_CODE: u8 = 7u8;
+impl Display for RequestParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl Error for RequestParseError {}
 
-trait ReadRequest {
-    fn read_request(&mut self) -> Request;
+pub trait ReadRequest {
+    fn read_request(&mut self) -> io::Result<Request>;
 }
 
 impl<R: BufRead> ReadRequest for R {
-    fn read_request(&mut self) -> Request {
-        let mut buf = Vec::with_capacity(2);
-        self.read_until(0, &mut buf);
-        Request::try_from(buf).unwrap()
+    fn read_request(&mut self) -> io::Result<Request> {
+        let mut buf = vec![0, 0];
+        self.read(&mut buf[..1])?;
+        if buf[0] > 0x04 {
+            self.read_until(0, &mut buf)?;
+        }
+
+        Request::try_from(buf).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
 }
 
@@ -92,7 +95,9 @@ impl TryFrom<Vec<u8>> for Request {
         match value[0] {
             0x01 => Ok(Request::GetCapabilities),
             0x02 => todo!(),
-            0x03 => {
+            0x03 => Ok(Request::Revert),
+            0x04 => Ok(Request::Reset),
+            0x05 => {
                 if value.len() < 3 {
                     return Err(RequestParseError::Empty);
                 }
@@ -101,8 +106,6 @@ impl TryFrom<Vec<u8>> for Request {
                     Err(_) => Err(RequestParseError::InvalidEncoding),
                 }
             }
-            0x04 => Ok(Request::Revert),
-            0x05 => Ok(Request::Reset),
             0x06 => {
                 if value.len() < 3 {
                     return Err(RequestParseError::Empty);
@@ -112,5 +115,28 @@ impl TryFrom<Vec<u8>> for Request {
             }
             _ => Err(RequestParseError::InvalidControlCode),
         }
+    }
+}
+
+impl Request {
+    fn discriminant(&self) -> u8 {
+        unsafe { *(self as *const Self as *const u8) }
+    }
+    pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        let protocol_id = self.discriminant();
+        writer.write(&[protocol_id])?;
+        match self {
+            Self::Initialize(lang) => {
+                writer.write_with_null(&lang.as_bytes())?;
+            }
+            Self::SetCursor(handle) => {
+                writer.write_with_null(&[
+                    (handle >> 8).try_into().unwrap(),
+                    (handle & 8).try_into().unwrap(),
+                ])?;
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
