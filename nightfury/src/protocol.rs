@@ -164,3 +164,36 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
         }
     }
 }
+
+impl<'a> Response<'a> {
+    fn discriminant(&self) -> u8 {
+        unsafe { *(self as *const Self as *const u8) }
+    }
+    pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        let disc = self.discriminant();
+        if disc < 0x2 {
+            writer.write(&[disc])?;
+        }
+        match self {
+            Self::RError(msg) => writer.write_with_null(&msg.as_bytes()),
+            Self::Capabilities(caps) => writer.write_with_null(
+                caps.iter()
+                    .fold(String::with_capacity(caps.len() * 2), |mut acc, el| {
+                        if !acc.is_empty() {
+                            acc.push(';');
+                        }
+                        acc.push_str(el);
+                        acc
+                    })
+                    .as_bytes(),
+            ),
+            Self::CursorHandle(handle) => writer
+                .write(&[
+                    (handle >> 8).try_into().unwrap(),
+                    (handle & 8).try_into().unwrap(),
+                ])
+                .map(|_| ()),
+            _ => Ok(()),
+        }
+    }
+}
