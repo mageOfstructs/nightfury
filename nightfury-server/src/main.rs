@@ -151,7 +151,7 @@ fn main() -> std::io::Result<()> {
                                         .read()
                                         .unwrap()
                                         .keys()
-                                        .map(|s| String::from(s))
+                                        .map(|s| s.as_str())
                                         .collect(),
                                 )
                                 .write(&mut stream)?;

@@ -143,7 +143,7 @@ impl<'a> Request<'a> {
 pub enum Response<'a> {
     Ok,
     RError(&'a str),
-    Capabilities(Vec<String>),
+    Capabilities(Vec<&'a str>),
     CursorHandle(u16),
     Expanded(&'a str),
 }
@@ -165,9 +165,7 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
                 .map(|str| Response::RError(str))
                 .map_err(|_| Error::InvalidEncoding),
             0x02 => str::from_utf8(&value[1..value.len() - 1])
-                .map(|str| {
-                    Response::Capabilities(str.split(';').map(|str| String::from(str)).collect())
-                })
+                .map(|str| Response::Capabilities(str.split(';').collect()))
                 .map_err(|_| Error::InvalidEncoding),
             _ => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::Expanded(str))
