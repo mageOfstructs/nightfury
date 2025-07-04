@@ -37,13 +37,14 @@ impl<S: Write> WriteNullDelimitedExt for S {
 
 #[derive(Debug)]
 #[repr(u8)]
-pub enum Request {
+pub enum Request<'a> {
     GetCapabilities,
-    InstallLanguage(String, Option<String>),
+    InstallLanguage(&'a str, Option<String>),
     Revert,
     Reset,
-    Initialize(String),
+    Initialize(&'a str),
     SetCursor(u16),
+    Advance(&'a str),
 }
 
 #[derive(Debug)]
@@ -61,24 +62,25 @@ impl Display for Error {
 impl std::error::Error for Error {}
 
 pub trait ReadRequest {
-    fn read_request(&mut self) -> io::Result<Request>;
+    fn read_request<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Request<'a>>;
 }
 
 impl<R: BufRead> ReadRequest for R {
-    fn read_request(&mut self) -> io::Result<Request> {
-        let mut buf = vec![0, 0];
+    fn read_request<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Request<'a>> {
+        buf.clear();
         self.read(&mut buf[..1])?;
         if buf[0] > 0x04 {
-            self.read_until(0, &mut buf)?;
+            self.read_until(0, buf)?;
         }
 
-        Request::try_from(buf).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+        Request::try_from(buf.as_slice())
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
 }
 
-impl TryFrom<Vec<u8>> for Request {
+impl<'a> TryFrom<&'a [u8]> for Request<'a> {
     type Error = Error;
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
         if value.is_empty() {
             return Err(Error::Empty);
         }
@@ -92,7 +94,7 @@ impl TryFrom<Vec<u8>> for Request {
                     return Err(Error::Empty);
                 }
                 match str::from_utf8(&value[1..value.len() - 1]) {
-                    Ok(str) => Ok(Request::Initialize(str.to_string())),
+                    Ok(str) => Ok(Request::Initialize(str)),
                     Err(_) => Err(Error::InvalidEncoding),
                 }
             }
@@ -103,21 +105,26 @@ impl TryFrom<Vec<u8>> for Request {
                 let cursor_handle = (value[1] as u16) << 8 | value[2] as u16;
                 Ok(Request::SetCursor(cursor_handle))
             }
-            _ => Err(Error::InvalidControlCode),
+            _ => str::from_utf8(&value[1..value.len() - 1])
+                .to_owned()
+                .map(|str| Request::Advance(str))
+                .map_err(|_| Error::InvalidEncoding),
         }
     }
 }
 
-impl Request {
+impl<'a> Request<'a> {
     fn discriminant(&self) -> u8 {
         unsafe { *(self as *const Self as *const u8) }
     }
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let protocol_id = self.discriminant();
-        writer.write(&[protocol_id])?;
+        if protocol_id < 0x07 {
+            writer.write(&[protocol_id])?;
+        }
         match self {
-            Self::Initialize(lang) => {
-                writer.write_with_null(&lang.as_bytes())?;
+            Self::Initialize(str) | Self::Advance(str) => {
+                writer.write_with_null(&str.as_bytes())?;
             }
             Self::SetCursor(handle) => {
                 writer.write_with_null(&[
@@ -138,6 +145,7 @@ pub enum Response<'a> {
     RError(&'a str),
     Capabilities(Vec<String>),
     CursorHandle(u16),
+    Expanded(&'a str),
 }
 
 impl<'a> TryFrom<&'a [u8]> for Response<'a> {
@@ -156,10 +164,13 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
             0x1 => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::RError(str))
                 .map_err(|_| Error::InvalidEncoding),
-            _ => str::from_utf8(&value[1..value.len() - 1])
+            0x02 => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| {
                     Response::Capabilities(str.split(';').map(|str| String::from(str)).collect())
                 })
+                .map_err(|_| Error::InvalidEncoding),
+            _ => str::from_utf8(&value[1..value.len() - 1])
+                .map(|str| Response::Expanded(str))
                 .map_err(|_| Error::InvalidEncoding),
         }
     }

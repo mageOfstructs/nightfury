@@ -1,7 +1,6 @@
 #![feature(if_let_guard)]
-use lib::protocol::WriteNullDelimitedExt;
+use lib::protocol::{ReadRequest, WriteNullDelimitedExt};
 use lib::{FSMNodeWrapper, ToCSV, get_test_fsm};
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs::{File, read_dir};
 use std::io::Write;
@@ -13,8 +12,8 @@ use std::sync::RwLock;
 use std::{env, thread};
 
 use bufstream::BufStream;
+use lib::FSMCursor;
 use lib::protocol::{Request, Response};
-use lib::{FSMCursor, FSMNode};
 
 fn handle_request(
     req: Request,
@@ -22,24 +21,20 @@ fn handle_request(
     stream: &mut BufStream<UnixStream>,
 ) -> std::io::Result<()> {
     match req {
+        Request::Revert => {
+            cursor.revert();
+        }
         Request::Reset => {
             cursor.reset();
         }
-        Request::Advance(c) => match cursor.advance(c) {
-            Some(s) => {
-                stream.write_with_null(
-                    serde_json::to_string(&Response::Expanded(s))
-                        .unwrap()
-                        .as_bytes(),
-                )?;
-            }
-            None => {
-                stream.write_with_null(serde_json::to_string(&Response::Ok).unwrap().as_bytes())?;
-            }
-        },
-        Request::AdvanceStr(str) => {
-            str.chars().for_each(|c| {
-                cursor.advance(c);
+        Request::Advance(str) => {
+            str.chars().for_each(|c| match cursor.advance(c) {
+                Some(s) => {
+                    Response::Expanded(&s).write(stream);
+                }
+                None => {
+                    Response::Ok.write(stream);
+                }
             });
         }
         _ => unreachable!(),
@@ -142,30 +137,25 @@ fn main() -> std::io::Result<()> {
                     println!("thread init");
                     let mut buf = Vec::new(); // bad
                     let mut cursor = None;
-                    while stream.read_until(0, &mut buf).expect("buf read") != 0 {
-                        let str = str::from_utf8(&buf[..&buf.len() - 1]).unwrap();
-                        println!("str: {str}");
-                        let req: Request = serde_json::from_str(str).expect("deserde");
+                    while let Ok(req) = stream.read_request(&mut buf) {
                         println!("req: {req:?}");
                         match req {
-                            Request::Init(ref name)
-                                if let Some(fsm) =
-                                    fsms_clone.read().unwrap().get(&*name.as_str()) =>
+                            Request::Initialize(ref name)
+                                if let Some(fsm) = fsms_clone.read().unwrap().get(*name) =>
                             {
                                 cursor = Some(FSMCursor::new(fsm))
                             }
-                            Request::GetCapabilities => stream.write_with_null(
-                                serde_json::to_string(&Response::Capabilities(
+                            Request::GetCapabilities => {
+                                Response::Capabilities(
                                     fsms_clone
                                         .read()
                                         .unwrap()
                                         .keys()
                                         .map(|s| String::from(s))
                                         .collect(),
-                                ))
-                                .unwrap()
-                                .as_bytes(),
-                            )?,
+                                )
+                                .write(&mut stream)?;
+                            }
                             _ => handle_request(
                                 req,
                                 &mut cursor.as_mut().expect("didn't call init!"),
@@ -173,7 +163,6 @@ fn main() -> std::io::Result<()> {
                             )?,
                         }
                         stream.flush().expect("stream flush");
-                        buf.clear();
                     }
                     std::io::Result::<()>::Ok(())
                 }));
