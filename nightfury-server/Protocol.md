@@ -21,14 +21,14 @@ Server communication is done over the UNIX socket "nightfury.sock", which is loc
 - 0x02: "install language"
   - TODO: ability to automatically get a language from some central registry
   - proposed format: `<CC><lang>[;<registry_url]\0`
-- 0x03: initialize
+- 0x03: revert
+  - causes the `revert()` function to be called on the cursor
+- 0x04: reset
+  - causes the current cursor to be set back to the fsm root and all internal state be cleared
+- 0x05: initialize
   - sets up a new cursor at the root of the specified language fsm
   - format: `<CC><lang>\0`
   - response: 16-bit unsigned integer (cursor handle)
-- 0x04: revert
-  - causes the `revert()` function to be called on the cursor
-- 0x05: reset
-  - causes the current cursor to be set back to the fsm root and all internal state be cleared
 - 0x06: set cursor
   - format: `<CC><cursor_handle>[request]\0`
   - sets the current cursor to `cursor_handle`
