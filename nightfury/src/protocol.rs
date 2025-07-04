@@ -1,15 +1,5 @@
-use std::error::Error;
 use std::fmt::Display;
-use std::io::{self, BufRead, ErrorKind, Read, Write};
-
-use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum Response {
-    Capabilities(Vec<String>),
-    Expanded(String),
-    Ok,
-}
+use std::io::{self, BufRead, ErrorKind, Write};
 
 pub trait WriteNullDelimitedExt {
     fn write_with_null(&mut self, data: &[u8]) -> std::io::Result<()>;
@@ -57,18 +47,18 @@ pub enum Request {
 }
 
 #[derive(Debug)]
-pub enum RequestParseError {
+pub enum Error {
     Empty,
     InvalidControlCode,
     InvalidEncoding,
 }
 
-impl Display for RequestParseError {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
     }
 }
-impl Error for RequestParseError {}
+impl std::error::Error for Error {}
 
 pub trait ReadRequest {
     fn read_request(&mut self) -> io::Result<Request>;
@@ -87,10 +77,10 @@ impl<R: BufRead> ReadRequest for R {
 }
 
 impl TryFrom<Vec<u8>> for Request {
-    type Error = RequestParseError;
+    type Error = Error;
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         if value.is_empty() {
-            return Err(RequestParseError::Empty);
+            return Err(Error::Empty);
         }
         match value[0] {
             0x01 => Ok(Request::GetCapabilities),
@@ -99,21 +89,21 @@ impl TryFrom<Vec<u8>> for Request {
             0x04 => Ok(Request::Reset),
             0x05 => {
                 if value.len() < 3 {
-                    return Err(RequestParseError::Empty);
+                    return Err(Error::Empty);
                 }
                 match str::from_utf8(&value[1..value.len() - 1]) {
                     Ok(str) => Ok(Request::Initialize(str.to_string())),
-                    Err(_) => Err(RequestParseError::InvalidEncoding),
+                    Err(_) => Err(Error::InvalidEncoding),
                 }
             }
             0x06 => {
                 if value.len() < 3 {
-                    return Err(RequestParseError::Empty);
+                    return Err(Error::Empty);
                 }
                 let cursor_handle = (value[1] as u16) << 8 | value[2] as u16;
                 Ok(Request::SetCursor(cursor_handle))
             }
-            _ => Err(RequestParseError::InvalidControlCode),
+            _ => Err(Error::InvalidControlCode),
         }
     }
 }
@@ -138,5 +128,39 @@ impl Request {
             _ => {}
         }
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+#[repr(u8)]
+pub enum Response<'a> {
+    Ok,
+    RError(&'a str),
+    Capabilities(Vec<String>),
+    CursorHandle(u16),
+}
+
+impl<'a> TryFrom<&'a [u8]> for Response<'a> {
+    type Error = Error;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err(Error::Empty);
+        }
+        if value.len() == 2 {
+            return Ok(Response::CursorHandle(
+                (value[0] as u16) << 8 | value[1] as u16,
+            ));
+        }
+        match value[0] {
+            0x0 => Ok(Response::Ok),
+            0x1 => str::from_utf8(&value[1..value.len() - 1])
+                .map(|str| Response::RError(str))
+                .map_err(|_| Error::InvalidEncoding),
+            _ => str::from_utf8(&value[1..value.len() - 1])
+                .map(|str| {
+                    Response::Capabilities(str.split(';').map(|str| String::from(str)).collect())
+                })
+                .map_err(|_| Error::InvalidEncoding),
+        }
     }
 }
