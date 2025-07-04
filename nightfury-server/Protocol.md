@@ -24,7 +24,7 @@ Server communication is done over the UNIX socket "nightfury.sock", which is loc
 - 0x03: initialize
   - sets up a new cursor at the root of the specified language fsm
   - format: `<CC><lang>\0`
-  - response: 32-bit unsigned integer (cursor handle)
+  - response: 16-bit unsigned integer (cursor handle)
 - 0x04: revert
   - causes the `revert()` function to be called on the cursor
 - 0x05: reset
