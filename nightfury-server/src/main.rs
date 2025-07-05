@@ -28,14 +28,11 @@ fn handle_request(
             cursor.reset();
         }
         Request::Advance(str) => {
-            str.chars().for_each(|c| match cursor.advance(c) {
-                Some(s) => {
-                    Response::Expanded(&s).write(stream);
-                }
-                None => {
-                    Response::Ok.write(stream);
-                }
-            });
+            str.chars().try_for_each(|c| match cursor.advance(c) {
+                Some(s) => Response::Expanded(&s).write(stream),
+
+                None => Response::Ok.write(stream),
+            })?;
         }
         _ => unreachable!(),
     }
