@@ -69,7 +69,9 @@ pub trait ReadRequest {
 impl<R: BufRead> ReadRequest for R {
     fn read_request<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Request<'a>> {
         buf.clear();
-        self.read(&mut buf[..1])?;
+        let mut sbuf: [u8; 1] = [0];
+        self.read(&mut sbuf)?;
+        buf.push(sbuf[0]);
         if buf[0] > 0x04 {
             self.read_until(0, buf)?;
         }
@@ -119,7 +121,7 @@ impl<'a> TryFrom<&'a [u8]> for Request<'a> {
                 let cursor_handle = (value[1] as u16) << 8 | value[2] as u16;
                 Ok(Request::SetCursor(cursor_handle))
             }
-            _ => str::from_utf8(&value[1..value.len() - 1])
+            _ => str::from_utf8(&value[..value.len() - 1])
                 .to_owned()
                 .map(|str| Request::Advance(str))
                 .map_err(|_| Error::InvalidEncoding),
@@ -216,6 +218,7 @@ impl<'a> Response<'a> {
                     (handle & 8).try_into().unwrap(),
                 ])
                 .map(|_| ()),
+            Self::Expanded(s) => writer.write_with_null(s.as_bytes()),
             _ => Ok(()),
         }
     }
