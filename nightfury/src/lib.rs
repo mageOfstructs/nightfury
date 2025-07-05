@@ -4,6 +4,7 @@
 #![feature(impl_trait_in_bindings)]
 #![feature(lock_value_accessors)]
 #![feature(pattern)]
+#![feature(buf_read_has_data_left)]
 
 use debug_print::debug_println;
 use fsm::NodeType::{self, *};
