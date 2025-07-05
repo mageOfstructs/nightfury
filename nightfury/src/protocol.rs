@@ -63,6 +63,7 @@ impl std::error::Error for Error {}
 
 pub trait ReadRequest {
     fn read_request<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Request<'a>>;
+    fn read_response<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Response<'a>>;
 }
 
 impl<R: BufRead> ReadRequest for R {
@@ -74,6 +75,19 @@ impl<R: BufRead> ReadRequest for R {
         }
 
         Request::try_from(buf.as_slice())
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+    }
+    fn read_response<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Response<'a>> {
+        let mut stack_buf: [u8; 2] = [0; 2];
+        self.read_exact(&mut stack_buf[..1])?;
+        if self.has_data_left()? {
+            self.read(&mut buf[1..2])?;
+            if self.has_data_left()? {
+                buf.extend(stack_buf);
+                self.read_until(0, buf)?;
+            }
+        }
+        Response::try_from(buf.as_slice())
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
 }
