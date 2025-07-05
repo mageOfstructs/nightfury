@@ -137,14 +137,16 @@ fn main() -> std::io::Result<()> {
                 handles.push(thread::spawn(move || {
                     println!("thread init");
                     let mut buf = Vec::new(); // bad
-                    let mut cursor = None;
+                    let mut cursors = Vec::new();
+                    let mut current_cursor = 0;
                     while let Ok(req) = stream.read_request(&mut buf) {
                         println!("req: {req:?}");
                         match req {
                             Request::Initialize(ref name)
                                 if let Some(fsm) = fsms_clone.read().unwrap().get(*name) =>
                             {
-                                cursor = Some(FSMCursor::new(fsm))
+                                current_cursor = cursors.len();
+                                cursors.push(FSMCursor::new(fsm));
                             }
                             Request::GetCapabilities => {
                                 Response::Capabilities(
@@ -157,11 +159,17 @@ fn main() -> std::io::Result<()> {
                                 )
                                 .write(&mut stream)?;
                             }
-                            _ => handle_request(
-                                req,
-                                &mut cursor.as_mut().expect("didn't call init!"),
-                                &mut stream,
-                            )?,
+                            Request::SetCursor(chandle) => {
+                                if cursors.get(chandle as usize).is_some() {
+                                    current_cursor = chandle as usize;
+                                } else {
+                                    eprintln!("Invalid handle: {chandle}");
+                                }
+                            }
+                            _ if let Some(mut cursor) = cursors.get_mut(current_cursor) => {
+                                handle_request(req, &mut cursor, &mut stream)?
+                            }
+                            _ => eprintln!("Got {req:?} but don't have a cursor yet!"),
                         }
                         stream.flush().expect("stream flush");
                     }
