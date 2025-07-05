@@ -12,6 +12,20 @@ let lastInput: String | null = null;
 let init: boolean = false;
 let knownCapabilities = [];
 
+type InitializeRequest = {
+  cc: 0x05,
+  lang: string
+}
+type AdvanceRequest = {
+  cc: null,
+  text: string
+}
+type Request = InitializeRequest | AdvanceRequest;
+
+type OkResponse = { cc: 0x0 };
+type ExpandedResponse = { cc: null, expanded: string };
+type Response = OkResponse | ExpandedResponse;
+
 function connect(path: string, callback: (socket: net.Socket) => void): net.Socket | null {
   access(path, constants.F_OK, (err) => {
     if (err) {
@@ -37,7 +51,7 @@ const socketSetup = (socket: net.Socket) => {
     const rawData = data.toString();
     console.log(rawData);
     console.log("parsing...");
-    handleResponse(rawData);
+    handleResponse(parseResponse(data));
   });
   sendInit(getLanguage()!);
 };
@@ -61,18 +75,30 @@ function insertExpansion(expaned: String) {
   }
 }
 
-function handleResponse(raw: String) {
-  const response = JSON.parse(raw.substring(0, raw.length - 1));
-  console.log(response);
-  if (response === "Ok") {
+function parseResponse(raw: Buffer): Response {
+  let ret: Response;
+  switch (raw.at(0)) {
+    case 0x0:
+      ret = { cc: 0x0 };
+      return ret;
+    default:
+      ret = { cc: null, expanded: raw.toString('utf8', 0, raw.length - 1) };
+      return ret;
+  }
+}
+function handleResponse(response: Response) {
+  if (response.cc === 0x0) {
     console.log("Last request succeeded!");
     return;
   }
-  if (response.Capabilities) {
-    knownCapabilities = response.Capabilities;
-  } else if (response.Expanded) {
-    insertExpansion(response.Expanded);
+  if (response.expanded) {
+    insertExpansion(response.expanded);
   }
+  // if (response.Capabilities) {
+  //   knownCapabilities = response.Capabilities;
+  // } else if (response.Expanded) {
+  //   insertExpansion(response.Expanded);
+  // }
 }
 
 function getRuntimeDir(defaultDir?: string) {
@@ -134,7 +160,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
       });
     } else {
-      vscode.window.showInformationMessage("Can't determine language!")
+      vscode.window.showInformationMessage("Can't determine language!");
     }
   });
 
@@ -143,32 +169,43 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposableActivateNightfury);
 }
 
-function buildRequest(req: Object | String) {
-  const jsonStr = JSON.stringify(req) + '\0';
-  console.log("Request: " + jsonStr);
-  return Buffer.from(jsonStr);
+function buildRequest(req: Request) {
+  let buf;
+  switch (req.cc) {
+    case 0x05:
+      buf = Buffer.allocUnsafe(req.lang.length + 2); // cc + NUL
+      buf.writeUint8(req.cc);
+      buf.fill(req.lang, 1, req.lang.length + 1);
+      buf.writeUint8(0, req.lang.length + 1);
+      return buf;
+    default:
+      buf = Buffer.allocUnsafe(req.text.length + 1);
+      buf.fill(req.text, 0, req.text.length);
+      buf.writeUint8(0, req.text.length);
+      return buf;
+  }
 }
 
-// TODO: make a cool TS Enum out of all this
-function sendInit(name: String, callback?: ((err?: Error | null) => void) | undefined) {
-  const reqObj = { "Init": name };
+function sendInit(name: string, callback?: ((err?: Error | null) => void) | undefined) {
+  const reqObj: Request = { cc: 0x05, lang: name };
   send(reqObj, callback);
 }
 
-function sendChar(char: String, callback?: ((err?: Error | null) => void) | undefined) {
+function sendChar(char: string, callback?: ((err?: Error | null) => void) | undefined) {
   if (char.length > 1) { throw new Error("not a char!"); }
   if (!init) {
     sendInit(vscode.window.activeTextEditor!.document.languageId, () => init = true);
   }
 
-  const reqObj = { "Advance": char };
-  send(reqObj);
+  const reqObj: Request = { cc: null, text: char };
+  send(reqObj, callback);
 }
 
 let lastReq = {};
-function send(req: Object | String, callback?: ((err?: Error | null) => void) | undefined) {
+function send(req: Request, callback?: ((err?: Error | null) => void) | undefined) {
   lastReq = req;
   const buf = buildRequest(req);
+  console.log(buf);
   if (socket) {
     socket?.write(buf, callback);
   } else {
