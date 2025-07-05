@@ -148,6 +148,9 @@ fn main() -> std::io::Result<()> {
                                 current_cursor = cursors.len();
                                 cursors.push(FSMCursor::new(fsm));
                             }
+                            Request::Initialize(ref name) => {
+                                eprintln!("Unknown language '{name}'")
+                            }
                             Request::GetCapabilities => {
                                 Response::Capabilities(
                                     fsms_clone
