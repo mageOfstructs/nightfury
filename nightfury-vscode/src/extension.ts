@@ -5,12 +5,28 @@ import * as vscode from 'vscode';
 import net from 'net';
 import process from 'process';
 import { access, accessSync, constants } from 'fs';
-import { warn } from 'console';
+import { error, warn } from 'console';
 
 let socket: net.Socket | null = null;
 let lastInput: String | null = null;
+let init: boolean = false;
+let knownCapabilities = [];
 
-function connect(path: string, callback: (socket: net.Socket) => void) {
+type InitializeRequest = {
+  cc: 0x05,
+  lang: string
+}
+type AdvanceRequest = {
+  cc: null,
+  text: string
+}
+type Request = InitializeRequest | AdvanceRequest;
+
+type OkResponse = { cc: 0x0 };
+type ExpandedResponse = { cc: null, expanded: string };
+type Response = OkResponse | ExpandedResponse;
+
+function connect(path: string, callback: (socket: net.Socket) => void): net.Socket | null {
   access(path, constants.F_OK, (err) => {
     if (err) {
       console.error("connect: " + err.toString());
@@ -19,8 +35,14 @@ function connect(path: string, callback: (socket: net.Socket) => void) {
         vscode.window.showInformationMessage('Connected to Nightfury Server!');
       });
       callback(socket);
+      return socket;
     }
   });
+  return null;
+}
+
+function getLanguage() {
+  return vscode.window.activeTextEditor?.document.languageId;
 }
 
 const socketSetup = (socket: net.Socket) => {
@@ -29,25 +51,54 @@ const socketSetup = (socket: net.Socket) => {
     const rawData = data.toString();
     console.log(rawData);
     console.log("parsing...");
-    const parsedData = JSON.parse(rawData.substring(0, rawData.length - 1));
-    console.log(parsedData);
-    if (parsedData["Expanded"]) {
-      console.log("inserting expansion...");
-      const editor = vscode.window.activeTextEditor;
-      if (editor) {
-        const document = editor.document;
-        editor.edit((editBuilder) => {
-          const curPos = editor.selection.active;
-          const range = document.getWordRangeAtPosition(curPos);
-          if (range) {
-            editBuilder.replace(range, parsedData["Expanded"] + " ");
-          } else {
-            console.warn("Range is undefined!");
-          }
-        })
-      }
-    }
+    handleResponse(parseResponse(data));
   });
+  sendInit(getLanguage()!);
+};
+
+function insertExpansion(expaned: String) {
+  console.log("inserting expansion...");
+  const editor = vscode.window.activeTextEditor;
+  if (editor) {
+    const document = editor.document;
+    editor.edit((editBuilder) => {
+      const curPos = editor.selection.active;
+      const range = document.getWordRangeAtPosition(curPos);
+      // hack to keep userdefineds from being overwritten
+      // probably need a new protocol message saying the userdefined was completed
+      if (range && expaned.startsWith(document.getText(range))) {
+        editBuilder.replace(range, expaned + " ");
+      } else if (!range) {
+        console.warn("Range is undefined!");
+      }
+    });
+  }
+}
+
+function parseResponse(raw: Buffer): Response {
+  let ret: Response;
+  switch (raw.at(0)) {
+    case 0x0:
+      ret = { cc: 0x0 };
+      return ret;
+    default:
+      ret = { cc: null, expanded: raw.toString('utf8', 0, raw.length - 1) };
+      return ret;
+  }
+}
+function handleResponse(response: Response) {
+  if (response.cc === 0x0) {
+    console.log("Last request succeeded!");
+    return;
+  }
+  if (response.expanded) {
+    insertExpansion(response.expanded);
+  }
+  // if (response.Capabilities) {
+  //   knownCapabilities = response.Capabilities;
+  // } else if (response.Expanded) {
+  //   insertExpansion(response.Expanded);
+  // }
 }
 
 function getRuntimeDir(defaultDir?: string) {
@@ -69,7 +120,6 @@ function getSocketPath() {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  connect('/home/jason/clones/nightfury/nightfury-server/nightfury.sock', socketSetup);
 
   // The command has been defined in the package.json file
   // Now provide the implementation of the command with registerCommand
@@ -89,48 +139,78 @@ export function activate(context: vscode.ExtensionContext) {
     });
   });
 
-  if (vscode.window.activeTextEditor?.document.languageId) {
-    sendInit(vscode.window.activeTextEditor?.document.languageId);
-    vscode.workspace.onDidChangeTextDocument(function(event) {
-      for (const contentChange of event.contentChanges) {
-        const textAdded = contentChange.text.trim();
-        if (textAdded.length == 0) {
-          continue;
-        }
-
-        sendChar(textAdded, (err) => {
-          if (err) {
-            console.error(err);
-          } else {
-            lastInput = textAdded;
+  const disposableActivateNightfury = vscode.commands.registerCommand('nightfury-vscode.activateForCurrent', () => {
+    if (vscode.window.activeTextEditor?.document.languageId) {
+      connect(getSocketPath(), socketSetup);
+      vscode.workspace.onDidChangeTextDocument(function(event) {
+        for (const contentChange of event.contentChanges) {
+          const textAdded = contentChange.text.trim();
+          if (textAdded.length === 0) {
+            continue;
           }
-        });
-      }
-    });
-  }
+
+          sendChar(textAdded, (err) => {
+            if (err) {
+              error("sendChar callback:");
+              console.error(err);
+            } else {
+              lastInput = textAdded;
+            }
+          });
+        }
+      });
+    } else {
+      vscode.window.showInformationMessage("Can't determine language!");
+    }
+  });
+
 
   context.subscriptions.push(disposableGetCaps);
+  context.subscriptions.push(disposableActivateNightfury);
 }
 
-function buildRequest(req: Object | String) {
-  const jsonStr = JSON.stringify(req) + '\0';
-  console.log("Request: " + jsonStr);
-  return Buffer.from(jsonStr);
+function buildRequest(req: Request) {
+  let buf;
+  switch (req.cc) {
+    case 0x05:
+      buf = Buffer.allocUnsafe(req.lang.length + 2); // cc + NUL
+      buf.writeUint8(req.cc);
+      buf.fill(req.lang, 1, req.lang.length + 1);
+      buf.writeUint8(0, req.lang.length + 1);
+      return buf;
+    default:
+      buf = Buffer.allocUnsafe(req.text.length + 1);
+      buf.fill(req.text, 0, req.text.length);
+      buf.writeUint8(0, req.text.length);
+      return buf;
+  }
 }
 
-// TODO: make a cool TS Enum out of all this
-function sendInit(name: String, callback?: ((err?: Error | null) => void) | undefined) {
-  const reqObj = { "Init": name };
-  const buf = buildRequest(reqObj);
-  socket?.write(buf, callback);
+function sendInit(name: string, callback?: ((err?: Error | null) => void) | undefined) {
+  const reqObj: Request = { cc: 0x05, lang: name };
+  send(reqObj, callback);
 }
 
-function sendChar(char: String, callback?: ((err?: Error | null) => void) | undefined) {
-  if (char.length > 1) throw new Error("not a char!");
+function sendChar(char: string, callback?: ((err?: Error | null) => void) | undefined) {
+  if (char.length > 1) { throw new Error("not a char!"); }
+  if (!init) {
+    sendInit(vscode.window.activeTextEditor!.document.languageId, () => init = true);
+  }
 
-  const reqObj = { "Advance": char };
-  const buf = buildRequest(reqObj);
-  socket?.write(buf, callback);
+  const reqObj: Request = { cc: null, text: char };
+  send(reqObj, callback);
+}
+
+let lastReq = {};
+function send(req: Request, callback?: ((err?: Error | null) => void) | undefined) {
+  lastReq = req;
+  const buf = buildRequest(req);
+  console.log(buf);
+  if (socket) {
+    socket?.write(buf, callback);
+  } else {
+    console.error("Socket not connected!");
+  }
 }
 
 // This method is called when your extension is deactivated

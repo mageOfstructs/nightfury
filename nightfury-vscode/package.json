@@ -16,6 +16,10 @@
       {
         "command": "nightfury-vscode.getCapabilities",
         "title": "Get Capabilities"
+      },
+      {
+        "command": "nightfury-vscode.activateForCurrent",
+        "title": "Activate Nightfury completion for current buffer"
       }
     ]
   },
