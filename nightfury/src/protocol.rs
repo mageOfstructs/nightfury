@@ -80,14 +80,11 @@ impl<R: BufRead> ReadRequest for R {
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
     fn read_response<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Response<'a>> {
-        let mut stack_buf: [u8; 2] = [0; 2];
-        self.read_exact(&mut stack_buf[..1])?;
+        let mut stack_buf: [u8; 1] = [0; 1];
+        self.read_exact(&mut stack_buf)?;
         if self.has_data_left()? {
-            self.read(&mut buf[1..2])?;
-            if self.has_data_left()? {
-                buf.extend(stack_buf);
-                self.read_until(0, buf)?;
-            }
+            buf.extend(stack_buf);
+            self.read_until(0, buf)?;
         }
         Response::try_from(buf.as_slice())
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
@@ -97,7 +94,7 @@ impl<R: BufRead> ReadRequest for R {
 impl<'a> TryFrom<&'a [u8]> for Request<'a> {
     type Error = Error;
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        if value.is_empty() {
+        if value.is_empty() || value[0] == 0x0 {
             return Err(Error::Empty);
         }
         match value[0] {
@@ -170,11 +167,6 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
         if value.is_empty() {
             return Err(Error::Empty);
         }
-        if value.len() == 2 {
-            return Ok(Response::CursorHandle(
-                (value[0] as u16) << 8 | value[1] as u16,
-            ));
-        }
         match value[0] {
             0x0 => Ok(Response::Ok),
             0x1 => str::from_utf8(&value[1..value.len() - 1])
@@ -183,6 +175,11 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
             0x02 => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::Capabilities(str.split(';').collect()))
                 .map_err(|_| Error::InvalidEncoding),
+            0x03 => value
+                .last_chunk::<2>()
+                .map(|handle| (handle[0] as u16) << 8 | handle[1] as u16)
+                .map(|handle| Response::CursorHandle(handle))
+                .ok_or(Error::Empty),
             _ => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::Expanded(str))
                 .map_err(|_| Error::InvalidEncoding),
@@ -214,6 +211,7 @@ impl<'a> Response<'a> {
             ),
             Self::CursorHandle(handle) => writer
                 .write(&[
+                    disc, // TODO: refactor
                     (handle >> 8).try_into().unwrap(),
                     (handle & 8).try_into().unwrap(),
                 ])
