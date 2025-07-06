@@ -22,6 +22,13 @@ type AdvanceRequest = {
 }
 type Request = InitializeRequest | AdvanceRequest;
 
+const Initialize = function(lang: string): InitializeRequest {
+  return { cc: 0x05, lang };
+}
+const Advance = function(text: string): AdvanceRequest {
+  return { cc: null, text };
+}
+
 type OkResponse = { cc: 0x0 };
 type ExpandedResponse = { cc: null, expanded: string };
 type Response = OkResponse | ExpandedResponse;
@@ -187,7 +194,7 @@ function buildRequest(req: Request) {
 }
 
 function sendInit(name: string, callback?: ((err?: Error | null) => void) | undefined) {
-  const reqObj: Request = { cc: 0x05, lang: name };
+  const reqObj = Initialize(name);
   send(reqObj, callback);
 }
 
@@ -197,7 +204,7 @@ function sendChar(char: string, callback?: ((err?: Error | null) => void) | unde
     sendInit(vscode.window.activeTextEditor!.document.languageId, () => init = true);
   }
 
-  const reqObj: Request = { cc: null, text: char };
+  const reqObj = Advance(char);
   send(reqObj, callback);
 }
 
