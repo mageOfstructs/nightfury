@@ -7,7 +7,7 @@ import process from 'process';
 import { access, accessSync, constants } from 'fs';
 import { error, warn } from 'console';
 
-let socket: net.Socket | null = null;
+const sockets: { [field: string]: net.Socket } = {};
 let lastInput: String | null = null;
 let init: boolean = false;
 let knownCapabilities = [];
@@ -38,11 +38,12 @@ function connect(path: string, callback: (socket: net.Socket) => void): net.Sock
     if (err) {
       console.error("connect: " + err.toString());
     } else {
-      socket = net.createConnection(path, () => {
+      const path = vscode.window.activeTextEditor!.document.uri.path;
+      sockets[path] = net.createConnection(path, () => {
         vscode.window.showInformationMessage('Connected to Nightfury Server!');
       });
-      callback(socket);
-      return socket;
+      callback(sockets[path]);
+      return sockets[path];
     }
   });
   return null;
@@ -126,6 +127,14 @@ function getSocketPath() {
   return getRuntimeDir('/home/jason/clones/nightfury/nightfury-server') + '/nightfury.sock';
 }
 
+function getCurrentSockConn(): net.Socket | null {
+  const path = vscode.window.activeTextEditor?.document.uri.path;
+  if (path) {
+    return sockets[path];
+  }
+  return null;
+}
+
 export function activate(context: vscode.ExtensionContext) {
 
   // The command has been defined in the package.json file
@@ -136,8 +145,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Display a message box to the user
     vscode.window.showInformationMessage('Rawrawrawrawrawr from nightfury-vscode!');
     console.log("Current language: " + vscode.window.activeTextEditor?.document.languageId);
-    let buf = Buffer.from("\"GetCapabilities\"\0");
-    socket?.write(buf, (err) => {
+    let buf = Buffer.from("\x01");
+    getCurrentSockConn()?.write(buf, (err) => {
       if (err) {
         console.error(err);
       }
@@ -213,6 +222,7 @@ function send(req: Request, callback?: ((err?: Error | null) => void) | undefine
   lastReq = req;
   const buf = buildRequest(req);
   console.log(buf);
+  const socket = getCurrentSockConn();
   if (socket) {
     socket?.write(buf, callback);
   } else {
@@ -222,6 +232,4 @@ function send(req: Request, callback?: ((err?: Error | null) => void) | undefine
 
 // This method is called when your extension is deactivated
 export function deactivate() {
-  socket?.destroy();
-  socket = null;
 }
