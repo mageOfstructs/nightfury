@@ -157,7 +157,7 @@ pub enum Response<'a> {
     Ok,
     RError(&'a str),
     Capabilities(Vec<&'a str>),
-    CursorHandle(u16),
+    CursorHandle(u8),
     Expanded(&'a str),
 }
 
@@ -176,9 +176,8 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
                 .map(|str| Response::Capabilities(str.split(';').collect()))
                 .map_err(|_| Error::InvalidEncoding),
             0x03 => value
-                .last_chunk::<2>()
-                .map(|handle| (handle[0] as u16) << 8 | handle[1] as u16)
-                .map(|handle| Response::CursorHandle(handle))
+                .get(1)
+                .map(|handle| Response::CursorHandle(*handle))
                 .ok_or(Error::Empty),
             _ => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::Expanded(str))
@@ -212,8 +211,7 @@ impl<'a> Response<'a> {
             Self::CursorHandle(handle) => writer
                 .write(&[
                     disc, // TODO: refactor
-                    (handle >> 8).try_into().unwrap(),
-                    (handle & 8).try_into().unwrap(),
+                    *handle,
                 ])
                 .map(|_| ()),
             Self::Expanded(s) => writer.write_with_null(s.as_bytes()),

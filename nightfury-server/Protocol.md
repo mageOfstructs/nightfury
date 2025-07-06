@@ -28,7 +28,6 @@ Server communication is done over the UNIX socket "nightfury.sock", which is loc
 - 0x05: initialize
   - sets up a new cursor at the root of the specified language fsm
   - format: `<CC><lang>\0`
-  - response: 16-bit unsigned integer (cursor handle)
 - 0x06: set cursor
   - format: `<CC><cursor_handle>[request]\0`
   - sets the current cursor to `cursor_handle`
@@ -41,3 +40,6 @@ Aside from request-specific responses, there are some general responses the serv
 - 0x0: "Ok"; the server processed the request successfully and has nothing to say back
 - 0x1: Generic error
   - format: `<CC>[error_message]\0`
+- 0x3: Cursor Handle
+  - on successful initialize
+  - is followed by an 8bit unsigned integer, specifying the cursor handle

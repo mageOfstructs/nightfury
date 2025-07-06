@@ -147,7 +147,7 @@ fn main() -> std::io::Result<()> {
                             {
                                 current_cursor = cursors.len();
                                 cursors.push(FSMCursor::new(fsm));
-                                Response::CursorHandle(cursors.len() as u16).write(&mut stream)?;
+                                Response::CursorHandle(cursors.len() as u8).write(&mut stream)?;
                             }
                             Request::Initialize(ref name) => {
                                 eprintln!("Unknown language '{name}'")
