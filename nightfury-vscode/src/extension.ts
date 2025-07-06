@@ -38,12 +38,10 @@ function connect(path: string, callback: (socket: net.Socket) => void): net.Sock
     if (err) {
       console.error("connect: " + err.toString());
     } else {
-      const path = vscode.window.activeTextEditor!.document.uri.path;
-      sockets[path] = net.createConnection(path, () => {
+      const socket = net.createConnection(path, () => {
         vscode.window.showInformationMessage('Connected to Nightfury Server!');
       });
-      callback(sockets[path]);
-      return sockets[path];
+      callback(socket);
     }
   });
   return null;
@@ -56,11 +54,12 @@ function getLanguage() {
 const socketSetup = (socket: net.Socket) => {
   socket.addListener('data', (data) => {
     console.log("Response from server:");
-    const rawData = data.toString();
-    console.log(rawData);
+    console.log(data);
     console.log("parsing...");
     handleResponse(parseResponse(data));
   });
+  const path = vscode.window.activeTextEditor!.document.uri.path;
+  sockets[path] = socket;
   sendInit(getLanguage()!);
 };
 
@@ -209,9 +208,6 @@ function sendInit(name: string, callback?: ((err?: Error | null) => void) | unde
 
 function sendChar(char: string, callback?: ((err?: Error | null) => void) | undefined) {
   if (char.length > 1) { throw new Error("not a char!"); }
-  if (!init) {
-    sendInit(vscode.window.activeTextEditor!.document.languageId, () => init = true);
-  }
 
   const reqObj = Advance(char);
   send(reqObj, callback);
