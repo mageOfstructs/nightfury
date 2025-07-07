@@ -136,11 +136,13 @@ fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expressi
     grammer.expressions.iter().find(|expr| expr.lhs == name)
 }
 
+/// creates a graph from the provided ebnf
+/// Returns an error if the ebnf crate deems the input to be invalid
 pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<FSMLock<FSMNode>>, String> {
     match ebnf::get_grammar(ebnf) {
         Ok(grammar) => {
             let root = FSMNode::new_null(None);
-            let root_node = grammar.expressions.get(0).expect("Empty BNF!");
+            let root_node = grammar.expressions.get(0).ok_or("Empty BNF!")?;
             let mut terminals = HashMap::new();
             handle_node(
                 &grammar,
@@ -151,6 +153,8 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<FSMLock<FSMNode>>, Str
             // sanity op, is_done() won't cancel preemptively
             FSMNode::add_child_to_all_leaves(&root, &FSMNode::new_null(None));
             FSMNode::minify(&root);
+            // UserdefCombos will want to know their Keyword children's first character to
+            // properly be able to finish
             FSMNode::set_userdef_links(&root);
             debug_println!("Total node cnt: {}", FSMNode::node_cnt(&root));
             // for (name, term) in terminals.iter() {
