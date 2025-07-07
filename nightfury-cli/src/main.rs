@@ -1,6 +1,9 @@
 use clap::Parser;
 use clap::Subcommand;
 use clap::command;
+use console::Term;
+use lib::FSMCursor;
+use lib::FSMNodeWrapper;
 use lib::ToCSV;
 use lib::frontend::create_graph_from_ebnf;
 use std::fs::File;
@@ -12,7 +15,6 @@ use std::os::unix::net::UnixStream;
 
 use bufstream::BufStream;
 use lib::protocol::Request;
-use lib::protocol::WriteNullDelimitedExt;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -30,7 +32,7 @@ enum NightfurySubcommand {
         #[arg(short, long)]
         out: Option<String>,
     },
-    /// (debug) send requests to a server instance; NOTE: there is currently no way of retaining state
+    /// WIP: (debug) send requests to a server instance; NOTE: there is currently no way of retaining state
     /// between calls.
     Send {
         /// input to enter into fsm
@@ -52,12 +54,18 @@ enum NightfurySubcommand {
         /// path to nightfury socket
         sock_path: String,
     },
+    /// Debug: print fsm
+    Dbg {
+        /// path of nightfury fsm file
+        fsm_path: String,
+    },
+    Chat {
+        fsm_path: String,
+    },
 }
 
 fn send_request(req: Request, stream: &mut BufStream<UnixStream>) -> std::io::Result<()> {
-    let msg = serde_json::to_string(&req)?;
-    dbg!(&msg);
-    stream.write_with_null_flush(msg.as_bytes())?;
+    req.write(stream)?;
     Ok(())
 }
 
@@ -108,21 +116,58 @@ fn main() -> std::io::Result<()> {
             }
 
             if let Some(name) = name {
-                send_request(Request::Init(name), &mut stream)?;
+                send_request(Request::Initialize(&name), &mut stream)?;
+                stream.flush()?;
+                stream.read_until(0, &mut Vec::new())?;
                 if reset {
                     send_request(Request::Reset, &mut stream)?;
                 }
-                if let Some(input) = &input
-                    && input.len() == 1
-                {
-                    send_request(Request::Advance(input.chars().nth(0).unwrap()), &mut stream)?;
-                } else if let Some(input) = input {
-                    send_request(Request::AdvanceStr(input), &mut stream)?;
+                if let Some(input) = &input {
+                    send_request(Request::Advance(input), &mut stream)?;
                 }
             }
+            stream.flush()?;
             let mut response = Vec::new();
             stream.read_until(0, &mut response)?;
             println!("{:?}", str::from_utf8(&response[..&response.len() - 1]));
+        }
+        NightfurySubcommand::Dbg { fsm_path } => {
+            let fsm = FSMNodeWrapper::from_csv_file(&fsm_path);
+            match fsm {
+                Ok(fsm) => {
+                    println!("FSM:");
+                    fsm.borrow().dbg();
+                }
+                Err(err) => eprintln!("{err}"),
+            }
+        }
+        NightfurySubcommand::Chat { fsm_path } => {
+            let fsm = FSMNodeWrapper::from_csv_file(&fsm_path);
+            match fsm {
+                Ok(root) => {
+                    println!("FSM:");
+                    root.borrow().dbg();
+                    let mut cursor = FSMCursor::new(&root);
+
+                    let terminal = Term::stdout();
+                    while !cursor.is_done() {
+                        let input = terminal.read_char().unwrap();
+                        match input {
+                            '\x08' => cursor.clear_inputbuf(),
+                            _ => {
+                                if let Some(res) = cursor.advance(input) {
+                                    print!("{} ", res);
+                                }
+                            }
+                        }
+                        if cursor.is_in_userdefined_stage() {
+                            print!("{input}");
+                        }
+                        std::io::stdout().flush()?;
+                    }
+                }
+                Err(err) => eprintln!("{err}"),
+            }
         }
     }
 
