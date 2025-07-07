@@ -1,4 +1,6 @@
-statement ::= ( ( decl | assignment | fncall ) ';' ) | if | block | for | while;
+main ::= { statement };
+statement ::= ( ( decl | assignment | fncall ) ';
+' ) | if | block | for | while;
 
 decl ::= ( 'let' | 'var' | 'const' ) identifier '=' value;
 identifier ::= #'[a-zA-Z][a-zA-Z0-9]*';
