@@ -89,7 +89,7 @@ function parseResponse(raw: Buffer): Response {
       ret = { cc: 0x0 };
       return ret;
     default:
-      ret = { cc: null, expanded: raw.toString('utf8', 0, raw.length - 1) };
+      ret = { cc: null, expanded: raw.toString('utf8', 0, raw.findIndex((val, _) => val == 0)) };
       return ret;
   }
 }
