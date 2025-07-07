@@ -1,5 +1,7 @@
 use super::FSMRc;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::read_to_string;
 use std::str::pattern::Pattern;
 
 use super::FSMLock;
@@ -321,6 +323,7 @@ impl FSMNode {
     }
     pub fn set_userdef_links(this: &FSMRc<FSMLock<FSMNode>>) {
         let mut userdefs = Vec::new();
+        // find all userdefs
         this.walk_fsm_breadth(
             &mut |_, p, _, _| {
                 if let UserDefinedCombo(_, _) = p.borrow().value {
@@ -733,8 +736,19 @@ impl FSMNode {
 }
 
 pub trait ToCSV {
+    const FIELD_DELIM: char = '\t';
+    const ENTRY_DELIM: char = '\n';
     fn to_csv(&self) -> String;
     fn from_csv(csv: &str) -> Self;
+
+    fn from_csv_file(path: &str) -> std::io::Result<Self>
+    where
+        Self: Sized,
+    {
+        File::open(&path)
+            .and_then(|file| read_to_string(file))
+            .map(|fsm| Self::from_csv(&fsm))
+    }
 }
 
 impl ToCSV for NodeType {
@@ -746,11 +760,10 @@ impl ToCSV for NodeType {
                 expanded,
                 closing_token,
             }) => format!(
-                "{}\t{}{}",
-                short,
-                expanded,
+                "{short}{}{expanded}{}",
+                Self::FIELD_DELIM,
                 if let Some(ct) = closing_token {
-                    "\t".to_owned() + ct
+                    Self::FIELD_DELIM.to_string() + ct
                 } else {
                     "".to_owned()
                 }
@@ -759,13 +772,14 @@ impl ToCSV for NodeType {
                 format!(
                     "/{}{}",
                     r.as_str(),
-                    cts.iter()
-                        .fold(String::new(), |acc, el| { format!("{}\t{}", acc, el) })
+                    cts.iter().fold(String::new(), |acc, el| {
+                        format!("{acc}{}{el}", Self::FIELD_DELIM)
+                    })
                 )
             }
             _ => panic!("FSMs with deprecated nodes will not be serialized!"),
         };
-        ret.push('\n');
+        ret.push(Self::ENTRY_DELIM);
         ret
     }
     fn from_csv(csv: &str) -> Self {
@@ -773,14 +787,14 @@ impl ToCSV for NodeType {
         if csv.len() < 2 {
             Null
         } else if csv.chars().nth(0).unwrap() == '/' {
-            let mut iter = csv.split('\t');
+            let mut iter = csv.split(Self::FIELD_DELIM);
             let regex = Regex::new(&iter.next().expect("invalid NodeType format")[1..])
                 .expect("invalid Regex format");
             let mut final_tokens = Vec::new();
             iter.for_each(|ft| final_tokens.push(ft.chars().nth(0).unwrap()));
             UserDefinedCombo(regex, final_tokens)
         } else {
-            let parts: Vec<_> = csv.split('\t').collect();
+            let parts: Vec<_> = csv.split(Self::FIELD_DELIM).collect();
             if parts.len() < 3 {
                 Keyword(Keyword {
                     short: parts[0].to_owned(),
@@ -808,40 +822,45 @@ impl ToCSV for FSMNodeWrapper {
             },
             true,
         );
-        let mut ret = format!("{}\t{}", self.borrow().id, self.borrow().value.to_csv());
+        let mut ret = format!(
+            "{}{}{}",
+            self.borrow().id,
+            Self::FIELD_DELIM,
+            self.borrow().value.to_csv()
+        );
         nodes.keys().for_each(|id| {
             ret.push_str(&id.to_string());
-            ret.push('\t');
+            ret.push(Self::FIELD_DELIM);
             ret.push_str(&nodes.get(id).unwrap().borrow().value.to_csv());
         });
-        ret.push('\n');
+        ret.push(Self::ENTRY_DELIM);
 
         ret.push_str(&self.borrow().id.to_string());
         self.borrow().children.iter().for_each(|el| {
-            ret.push('\t');
+            ret.push(Self::FIELD_DELIM);
             ret.push_str(&el.borrow().id.to_string());
         });
-        ret.push('\n');
+        ret.push(Self::ENTRY_DELIM);
 
         nodes.keys().for_each(|id| {
             ret.push_str(&id.to_string());
             let node = nodes.get(id).unwrap();
             node.borrow().children.iter().for_each(|el| {
-                ret.push('\t');
+                ret.push(Self::FIELD_DELIM);
                 ret.push_str(&el.borrow().id.to_string());
             });
-            ret.push('\n');
+            ret.push(Self::ENTRY_DELIM);
         });
         ret
     }
     fn from_csv(csv: &str) -> Self {
-        let mut iter = csv.split_indices('\n');
+        let mut iter = csv.split_indices(Self::ENTRY_DELIM);
         let mut nodes = HashMap::new();
 
         // TODO: refactor
         let line = iter.next().unwrap();
         println!("from_csv at line '{line:?}'");
-        let mut line_iter = line.0.split_indices('\t');
+        let mut line_iter = line.0.split_indices(Self::FIELD_DELIM);
         let id: usize = line_iter.next().unwrap().0.parse().unwrap();
         let ntype = match line_iter.next() {
             Some(nval) => NodeType::from_csv(&line.0[nval.1..]),
@@ -854,7 +873,7 @@ impl ToCSV for FSMNodeWrapper {
             && !part.0.is_empty()
         {
             println!("from_csv at line '{part:?}'");
-            let mut line_iter = part.0.split_indices('\t');
+            let mut line_iter = part.0.split_indices(Self::FIELD_DELIM);
             let id: usize = line_iter.next().unwrap().0.parse().unwrap();
             let ntype = match line_iter.next() {
                 Some(nval) => NodeType::from_csv(&part.0[nval.1..]),
@@ -868,7 +887,7 @@ impl ToCSV for FSMNodeWrapper {
         while let Some(part) = iter.next()
             && !part.0.is_empty()
         {
-            let mut iter = part.0.split('\t');
+            let mut iter = part.0.split(Self::FIELD_DELIM);
             let id: usize = iter.next().unwrap().parse().unwrap();
             let parent = nodes.get(&id).unwrap();
             while let Some(part) = iter.next() {
