@@ -30,8 +30,10 @@ const Advance = function(text: string): AdvanceRequest {
 }
 
 type OkResponse = { cc: 0x0 };
+type ErrorResponse = { cc: 0x1, msg: string };
+type RegexFullResposne = { cc: 0x2 };
 type ExpandedResponse = { cc: null, expanded: string };
-type Response = OkResponse | ExpandedResponse;
+type Response = OkResponse | ErrorResponse | RegexFullResposne | ExpandedResponse;
 
 function connect(path: string, callback: (socket: net.Socket) => void): net.Socket | null {
   access(path, constants.F_OK, (err) => {
@@ -51,61 +53,115 @@ function getLanguage() {
   return vscode.window.activeTextEditor?.document.languageId;
 }
 
+function handleMsgs(msgs: Buffer[]) {
+  const msg = msgs.shift();
+  if (msg) {
+    handleResponse(parseResponse(msg)).then(() => handleMsgs(msgs));
+  }
+}
+
 const socketSetup = (socket: net.Socket) => {
   socket.addListener('data', (data) => {
     console.log("Response from server:");
     console.log(data);
-    console.log("parsing...");
-    handleResponse(parseResponse(data));
+    console.log("splitting...");
+    handleMsgs(splitBufIntoMessages(data));
   });
   const path = vscode.window.activeTextEditor!.document.uri.path;
   sockets[path] = socket;
   sendInit(getLanguage()!);
 };
 
-function insertExpansion(expaned: String) {
+async function insertExpansion(expaned: string, insert: boolean = false) {
   console.log("inserting expansion...");
   const editor = vscode.window.activeTextEditor;
   if (editor) {
     const document = editor.document;
-    editor.edit((editBuilder) => {
+    await editor.edit((editBuilder) => {
+      console.log(editor.selections);
       const curPos = editor.selection.active;
+      console.log(curPos);
       const range = document.getWordRangeAtPosition(curPos);
+      console.log(range);
       // hack to keep userdefineds from being overwritten
       // probably need a new protocol message saying the userdefined was completed
-      if (range && expaned.startsWith(document.getText(range))) {
-        editBuilder.replace(range, expaned + " ");
-      } else if (!range) {
+      if (range) {
+        if (!insert) {
+          console.log(`replacing '${document.getText(range)}'`);
+          editBuilder.replace(range, expaned + " ");
+          // if (curPos.character >= range.end.character) {
+          //   insertExpansion(" ", true);
+          // }
+        } else {
+          console.log(`inserting '${expaned}'`);
+          editBuilder.insert(curPos, expaned);
+        }
+      } else {
         console.warn("Range is undefined!");
+        editBuilder.replace(editor.selection, expaned + " ");
       }
+      // if (range && expaned.startsWith(document.getText(range))) {
+      //   if (!insert) {
+      //     editBuilder.replace(range, expaned + " ");
+      //   }
+      // } else if (range) {
+      //   console.log(curPos);
+      // } else {
+      //   console.warn("Range is undefined!");
+      // }
     });
+  } else {
+    console.warn("editor is undefined!");
   }
 }
 
+function splitBufIntoMessages(raw: Buffer): Buffer[] {
+  const messages = [];
+  let prev = 0;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw.at(i)! < 0x8) {
+      const buf = Buffer.allocUnsafe(i - prev + 1);
+      raw.copy(buf, 0, prev, i + 1);
+      messages.push(buf);
+      prev = i + 1;
+    }
+  }
+  console.log("messages:");
+  console.log(messages);
+  return messages;
+}
 function parseResponse(raw: Buffer): Response {
   let ret: Response;
-  switch (raw.at(0)) {
+  const id = raw.at(0);
+  switch (id) {
     case 0x0:
-      ret = { cc: 0x0 };
+    case 0x2:
+      ret = { cc: id! };
       return ret;
+    case 0x1:
+      return { cc: id!, msg: raw.toString('utf8', 1, raw.length - 1) };
     default:
-      ret = { cc: null, expanded: raw.toString('utf8', 0, raw.findIndex((val, _) => val == 0)) };
+      ret = { cc: null, expanded: raw.toString('utf8', 0, raw.length - 1) };
       return ret;
   }
 }
-function handleResponse(response: Response) {
-  if (response.cc === 0x0) {
-    console.log("Last request succeeded!");
-    return;
+async function handleResponse(response: Response) {
+  console.log(vscode.window.activeTextEditor?.document.lineAt(0));
+  switch (response.cc) {
+    case 0x0:
+      console.log("Last request succeeded!");
+      return;
+    case 0x1:
+      console.error(`Server Error: ${response.msg}`);
+      return;
+    case 0x2:
+      console.log("inserting space");
+      await insertExpansion(' ', true);
+      return;
+    default:
+      console.log(`inserting '${response.expanded}'`);
+      await insertExpansion(response.expanded);
   }
-  if (response.expanded) {
-    insertExpansion(response.expanded);
-  }
-  // if (response.Capabilities) {
-  //   knownCapabilities = response.Capabilities;
-  // } else if (response.Expanded) {
-  //   insertExpansion(response.Expanded);
-  // }
 }
 
 function getRuntimeDir(defaultDir?: string) {
