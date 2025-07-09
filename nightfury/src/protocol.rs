@@ -159,6 +159,7 @@ pub enum Response<'a> {
     RegexFull,
     Capabilities(Vec<&'a str>),
     CursorHandle(u8),
+    InvalidChar,
     Expanded(&'a str),
 }
 
@@ -181,6 +182,7 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
                 .get(1)
                 .map(|handle| Response::CursorHandle(*handle))
                 .ok_or(Error::Empty),
+            0x05 => Ok(Response::InvalidChar),
             _ => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::Expanded(str))
                 .map_err(|_| Error::InvalidEncoding),
@@ -194,7 +196,7 @@ impl<'a> Response<'a> {
     }
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let disc = self.discriminant();
-        if disc < 0x5 {
+        if disc < 0x6 {
             writer.write(&[disc])?;
         }
         match self {
