@@ -10,7 +10,7 @@ Server communication is done over the UNIX socket "nightfury.sock", which is loc
   - Should there be no completion possible yet, a single NUL character is returned
 - Unicode strings must be UTF-8 encoded
 
-### Control Codes
+### Request Control Codes
 
 - 0x01-0x07 (inclusive) are reserved
 - `<CC>`: control code
@@ -33,13 +33,13 @@ Server communication is done over the UNIX socket "nightfury.sock", which is loc
   - sets the current cursor to `cursor_handle`
   - if request is given, only use the specified cursor for that request, do not update the current cursor state
 
-### Server responses
-
-Aside from request-specific responses, there are some general responses the server can give:
+### Server Response Control Codes
 
 - 0x0: "Ok"; the server processed the request successfully and has nothing to say back
 - 0x1: Generic error
   - format: `<CC>[error_message]\0`
-- 0x3: Cursor Handle
+- 0x2: RegexFull: a userdefined node was just completed, meaning only the last entered character needs to be replaced with the expansion following this.
+- 0x4: Cursor Handle
   - on successful initialize
   - is followed by an 8bit unsigned integer, specifying the cursor handle
+- 0x5: InvalidChar: dead end detection was triggered, meaning the character couldn't be inserted
