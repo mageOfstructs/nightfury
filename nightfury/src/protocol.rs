@@ -156,6 +156,7 @@ impl<'a> Request<'a> {
 pub enum Response<'a> {
     Ok,
     RError(&'a str),
+    RegexFull,
     Capabilities(Vec<&'a str>),
     CursorHandle(u8),
     Expanded(&'a str),
@@ -168,14 +169,15 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
             return Err(Error::Empty);
         }
         match value[0] {
-            0x0 => Ok(Response::Ok),
-            0x1 => str::from_utf8(&value[1..value.len() - 1])
+            0x00 => Ok(Response::Ok),
+            0x01 => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::RError(str))
                 .map_err(|_| Error::InvalidEncoding),
-            0x02 => str::from_utf8(&value[1..value.len() - 1])
+            0x02 => Ok(Response::RegexFull),
+            0x03 => str::from_utf8(&value[1..value.len() - 1])
                 .map(|str| Response::Capabilities(str.split(';').collect()))
                 .map_err(|_| Error::InvalidEncoding),
-            0x03 => value
+            0x04 => value
                 .get(1)
                 .map(|handle| Response::CursorHandle(*handle))
                 .ok_or(Error::Empty),
@@ -192,7 +194,7 @@ impl<'a> Response<'a> {
     }
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let disc = self.discriminant();
-        if disc < 0x2 {
+        if disc < 0x5 {
             writer.write(&[disc])?;
         }
         match self {
@@ -208,12 +210,7 @@ impl<'a> Response<'a> {
                     })
                     .as_bytes(),
             ),
-            Self::CursorHandle(handle) => writer
-                .write(&[
-                    disc, // TODO: refactor
-                    *handle,
-                ])
-                .map(|_| ()),
+            Self::CursorHandle(handle) => writer.write(&[*handle]).map(|_| ()),
             Self::Expanded(s) => writer.write_with_null(s.as_bytes()),
             _ => Ok(()),
         }
