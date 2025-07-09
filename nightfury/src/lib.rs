@@ -52,6 +52,7 @@ impl PartialMatch for Regex {
             if let Ok(regex) = Regex::new(&orig[0..=i])
                 && regex.is_match(hay)
             {
+                println!("partial_match '{}' match with '{}'", hay, regex.as_str());
                 return true;
             }
         }
@@ -160,8 +161,20 @@ pub struct FSMCursor {
     root: InternalCursor,
     cur_ast_pos: InternalCursor,
     input_buf: String,
+    did_revert: bool,
     unfinished_nodes: Vec<InternalCursor>,
     path: Vec<InternalCursor>,
+}
+
+/// offers more insight in what advancing the cursor did
+#[derive(Debug, PartialEq)]
+pub enum AdvanceResult {
+    /// returned after matching a Keyword directly after a userdef
+    ExpandedAfterUserdef(String),
+    /// ordinary Keyword match
+    Expanded(String),
+    /// dead_end detection triggered and the internal state did not update
+    InvalidChar,
 }
 
 impl FSMCursor {
@@ -172,9 +185,13 @@ impl FSMCursor {
             ..Default::default()
         }
     }
+    /// resets the cursor back to the FSM root as if new() has just been called
     pub fn reset(&mut self) {
         self.cur_ast_pos = FSMWeak::clone(&self.root);
         self.input_buf.clear();
+        self.did_revert = false;
+        self.unfinished_nodes.clear();
+        self.path.clear();
     }
     fn handle_userdefined_combo(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
@@ -190,6 +207,7 @@ impl FSMCursor {
                     }) = &c.borrow().value
                         && short.starts_with(input)
                     {
+                        println!("handle_userdefined_combo: found another keyword!");
                         self.update_cursor(&c);
                         self.input_buf.clear();
                         ret = Some(expanded.clone());
@@ -205,6 +223,7 @@ impl FSMCursor {
             if let UserDefinedCombo(r, _) = self.get_current_nodeval()
                 && !r.is_match(&self.input_buf)
             {
+                self.did_revert = true;
                 self.input_buf.pop();
             }
             None
@@ -235,6 +254,7 @@ impl FSMCursor {
             None
         }
     }
+    /// clears the internal buffer
     pub fn clear_inputbuf(&mut self) {
         self.input_buf.clear();
     }
@@ -246,7 +266,7 @@ impl FSMCursor {
             &mut |_, _, child, _| match &child.value {
                 UserDefined { .. } => true,
                 UserDefinedRegex(regex) | UserDefinedCombo(regex, _)
-                    if regex.partial_match(&self.input_buf) =>
+                    if regex.is_match(&self.input_buf) =>
                 {
                     true
                 }
@@ -319,18 +339,21 @@ impl FSMCursor {
         }
 
         let userdef_match = self.search_for_userdefs(treenode);
-        if userdef_match.is_some() {
+        if userdef_match.is_some() && potential_matches < 1 {
             return userdef_match;
         }
 
+        // TODO: look into whether potential userdefs also need to be checked here
         // if we didn't find any potential keywords/userdef nodes
         if potential_matches == 0 {
             // don't like that this function has to take a &mut self just because of this
             self.input_buf.pop();
+            self.did_revert = true;
         }
         None
     }
-    pub fn advance(&mut self, input: char) -> Option<String> {
+    /// advances the cursor's position, taking the key the user pressed last
+    pub fn advancex(&mut self, input: char) -> Option<AdvanceResult> {
         let binding = self.get_cur_ast_binding();
         let borrow = binding.borrow();
         debug_println!(
@@ -347,11 +370,11 @@ impl FSMCursor {
                 return match &node.borrow().value {
                     NodeType::Keyword(Keyword { expanded, .. }) => {
                         self.input_buf.clear();
-                        Some(expanded.clone())
+                        Some(AdvanceResult::Expanded(expanded.to_string()))
                     }
                     NodeType::UserDefined { final_chars } => {
                         let res = self.handle_userdefined(input, &final_chars);
-                        res
+                        res.map(|expanded| AdvanceResult::ExpandedAfterUserdef(expanded))
                     }
                     NodeType::UserDefinedRegex(_) => None,
                     _ => unreachable!(),
@@ -362,7 +385,7 @@ impl FSMCursor {
             NodeType::UserDefined { final_chars, .. } => {
                 let res = self.handle_userdefined(input, final_chars);
                 if res.is_some() {
-                    return res;
+                    return res.map(|expanded| AdvanceResult::ExpandedAfterUserdef(expanded));
                 }
             }
             NodeType::UserDefinedRegex(r) => {
@@ -376,7 +399,7 @@ impl FSMCursor {
                     if next_node.is_none() {
                         debug_println!("No node found");
                         self.input_buf.clear();
-                        return Some(input.to_string());
+                        return Some(AdvanceResult::ExpandedAfterUserdef(input.to_string()));
                     }
                     let next_node = next_node.unwrap();
                     self.update_cursor(&next_node);
@@ -412,13 +435,13 @@ impl FSMCursor {
                         Some(input.to_string())
                     };
                     self.input_buf.clear();
-                    return ret;
+                    return ret.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp));
                 }
             }
             UserDefinedCombo(_, f) => {
                 let ret = self.handle_userdefined_combo(input, f);
                 if ret.is_some() {
-                    return ret;
+                    return ret.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp));
                 }
             }
             _ => {
@@ -428,29 +451,51 @@ impl FSMCursor {
                     return match &node.borrow().value {
                         NodeType::Keyword(Keyword { expanded, .. }) => {
                             self.input_buf.clear();
-                            Some(expanded.clone())
+                            Some(AdvanceResult::Expanded(expanded.clone()))
                         }
                         NodeType::UserDefined { final_chars } => {
                             let res = self.handle_userdefined(input, &final_chars);
-                            res
+                            res.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp))
                         }
                         NodeType::UserDefinedRegex(_) => None,
-                        NodeType::UserDefinedCombo(r, f) => {
+                        NodeType::UserDefinedCombo(_, f) => {
                             let res = self.handle_userdefined_combo(input, f);
-                            res
+                            self.check_for_revert(
+                                res.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp)),
+                            )
                         }
                         _ => unreachable!(),
                     };
                 }
             }
         }
-        None
+        self.check_for_revert(None)
     }
 
+    fn check_for_revert(&mut self, optb: Option<AdvanceResult>) -> Option<AdvanceResult> {
+        if self.did_revert {
+            self.did_revert = false;
+            Some(AdvanceResult::InvalidChar)
+        } else {
+            optb
+        }
+    }
+
+    /// simpler version of [advancex]
+    pub fn advance(&mut self, input: char) -> Option<String> {
+        self.advancex(input).and_then(|res| match res {
+            AdvanceResult::ExpandedAfterUserdef(str) | AdvanceResult::Expanded(str) => Some(str),
+            _ => None,
+        })
+    }
+
+    /// removes one character from the internal buffer, or jumps back to the previous node if the
+    /// buffer is empty
     pub fn revert(&mut self) {
         if self.input_buf.is_empty()
             && let Some(new_cursor_pos) = self.path.pop()
         {
+            // FIXME: does not revert input_buf
             self.cur_ast_pos = new_cursor_pos;
         } else if !self.input_buf.is_empty() {
             self.input_buf.pop();
@@ -471,9 +516,10 @@ impl FSMCursor {
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
         }
         debug_println!(
-            "uc: {:?} {}",
+            "uc: {:?} {}/{:?}",
             self.get_cur_ast_binding().borrow().value,
-            self.get_cur_ast_binding().borrow().id()
+            self.get_cur_ast_binding().borrow().id(),
+            node.borrow().value
         );
     }
     fn dump(&self) {
@@ -941,5 +987,35 @@ mod tests {
 
         assert_eq!(None, cursor.advance('a'));
         assert_eq!("test", cursor.advance('t').unwrap());
+    }
+    #[test]
+    fn test_advancex() {
+        let ebnf = r"
+        t1 ::= ( #'[0-9]' 'asdf' ) | ( 'test' );
+        ";
+        let root = create_graph_from_ebnf(ebnf).unwrap();
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!(None, cursor.advancex('0'));
+        assert_eq!(
+            AdvanceResult::ExpandedAfterUserdef("asdf".to_string()),
+            cursor.advancex('a').unwrap()
+        );
+        cursor.reset();
+        assert_eq!(AdvanceResult::InvalidChar, cursor.advancex('!').unwrap());
+        assert_eq!(
+            AdvanceResult::Expanded("test".to_string()),
+            cursor.advancex('t').unwrap()
+        );
+    }
+
+    #[test]
+    fn dead_end_edgecase() {
+        let ebnf = r"
+        t1 ::= #'[0-9]' '=';
+        ";
+        let root = create_graph_from_ebnf(ebnf).unwrap();
+        let mut cursor = FSMCursor::new(&root);
+        assert_eq!(None, cursor.advance('0'));
+        assert_eq!("=", cursor.advance('=').unwrap());
     }
 }
