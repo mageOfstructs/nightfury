@@ -1,10 +1,10 @@
 #![feature(if_let_guard)]
-use lib::protocol::{ReadRequest, WriteNullDelimitedExt};
-use lib::{FSMNodeWrapper, ToCSV, get_test_fsm};
+use lib::protocol::ReadRequest;
+use lib::{AdvanceResult, FSMNodeWrapper, ToCSV, get_test_fsm};
 use std::collections::HashMap;
 use std::fs::{File, read_dir};
 use std::io::Write;
-use std::io::{BufRead, read_to_string};
+use std::io::read_to_string;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::exit;
 use std::sync::Arc;
@@ -28,9 +28,13 @@ fn handle_request(
             cursor.reset();
         }
         Request::Advance(str) => {
-            str.chars().try_for_each(|c| match cursor.advance(c) {
-                Some(s) => Response::Expanded(&s).write(stream),
-
+            str.chars().try_for_each(|c| match cursor.advancex(c) {
+                Some(AdvanceResult::Expanded(s)) => Response::Expanded(&s).write(stream),
+                Some(AdvanceResult::ExpandedAfterUserdef(s)) => {
+                    Response::RegexFull.write(stream)?;
+                    Response::Expanded(&s).write(stream)
+                }
+                Some(AdvanceResult::InvalidChar) => Response::InvalidChar.write(stream),
                 None => Response::Ok.write(stream),
             })?;
         }
