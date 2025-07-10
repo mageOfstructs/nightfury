@@ -1,3 +1,4 @@
+use debug_print::debug_println;
 use std::fmt::Display;
 use std::io::{self, BufRead, ErrorKind, Write};
 
@@ -195,6 +196,7 @@ impl<'a> Response<'a> {
         unsafe { *(self as *const Self as *const u8) }
     }
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        debug_println!("res: {self:?}");
         let disc = self.discriminant();
         if disc < 0x6 {
             writer.write(&[disc])?;
