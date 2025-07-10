@@ -73,6 +73,35 @@ const socketSetup = (socket: net.Socket) => {
   sendInit(getLanguage()!);
 };
 
+function getChar(line: number, character: number): string | undefined {
+  return vscode.window.activeTextEditor?.document.lineAt(line)?.text.at(character);
+}
+function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined {
+  const curLineLen = vscode.window.activeTextEditor?.document.lineAt(pos.line).text.length;
+  if (!curLineLen) {
+    return undefined;
+  }
+  let [startLine, startChar] = [pos.line, pos.character];
+  let tmp;
+  while ((tmp = getChar(startLine, startChar)) && !/\s/.test(tmp)) {
+    if (startChar > 0) startChar--;
+    else {
+      break;
+    }
+  }
+  if (tmp && /\s/.test(tmp)) {
+    startChar++;
+  }
+  let [endLine, endChar] = [pos.line, pos.character];
+  while ((tmp = getChar(endLine, endChar)) && !/\s/.test(tmp)) {
+    if (endChar < curLineLen) endChar++;
+    else {
+      break;
+    }
+  }
+  return new vscode.Range(startLine, startChar, endLine, endChar);
+}
+
 async function insertExpansion(expaned: string, insert: boolean = false) {
   console.log("inserting expansion...");
   const editor = vscode.window.activeTextEditor;
@@ -80,9 +109,13 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
     const document = editor.document;
     await editor.edit((editBuilder) => {
       console.log(editor.selections);
-      const curPos = editor.selection.active;
+      let curPos = editor.selection.active;
+      if (document.lineAt(curPos.line).text.length <= curPos.character) {
+        curPos = curPos.translate(0, curPos.character - document.lineAt(curPos.line).text.length - 1);
+      }
       console.log(curPos);
-      const range = document.getWordRangeAtPosition(curPos);
+      console.log(document.lineAt(curPos.line).text[curPos.character]);
+      const range = getWordRangeAtPosition(curPos);
       console.log(range);
       // hack to keep userdefineds from being overwritten
       // probably need a new protocol message saying the userdefined was completed
@@ -90,16 +123,13 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
         if (!insert) {
           console.log(`replacing '${document.getText(range)}'`);
           editBuilder.replace(range, expaned + " ");
-          // if (curPos.character >= range.end.character) {
-          //   insertExpansion(" ", true);
-          // }
         } else {
           console.log(`inserting '${expaned}'`);
           editBuilder.insert(curPos, expaned);
         }
       } else {
         console.warn("Range is undefined!");
-        editBuilder.replace(editor.selection, expaned + " ");
+        // editBuilder.replace(editor.selection, expaned + " ");
       }
       // if (range && expaned.startsWith(document.getText(range))) {
       //   if (!insert) {
