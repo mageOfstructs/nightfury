@@ -9,8 +9,6 @@ import { error, warn } from 'console';
 
 const sockets: { [field: string]: net.Socket } = {};
 let lastInput: String | null = null;
-let init: boolean = false;
-let knownCapabilities = [];
 
 type InitializeRequest = {
   cc: 0x05,
@@ -347,4 +345,7 @@ function send(req: Request, callback?: ((err?: Error | null) => void) | undefine
 
 // This method is called when your extension is deactivated
 export function deactivate() {
+  for (const socket of Object.values(sockets)) {
+    socket.destroy();
+  }
 }
