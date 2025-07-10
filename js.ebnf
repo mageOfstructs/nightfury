@@ -19,7 +19,7 @@ value ::= literal | identifier;
 block ::= '{' { statement } '}';
 
 if ::= 'if (' condition ')' block;
-condition ::= identifier { boolop ' ' identifier };
+condition ::= ( identifier | value ) { boolop ' ' ( identifier | value ) };
 boolop ::= '&&' | '||';
 while ::= 'while (' condition ')' block;
 for ::= 'for (' ( decl )? ';' condition ';' assignment ')' block;
