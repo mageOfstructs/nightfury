@@ -128,7 +128,7 @@ impl<'a> TryFrom<&'a [u8]> for Request<'a> {
 
 impl<'a> Request<'a> {
     fn discriminant(&self) -> u8 {
-        unsafe { *(self as *const Self as *const u8) }
+        return unsafe { *(self as *const Self as *const u8) } + 1u8;
     }
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let protocol_id = self.discriminant();
