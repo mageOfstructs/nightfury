@@ -9,6 +9,7 @@ import { error, warn } from 'console';
 
 const sockets: { [field: string]: net.Socket } = {};
 let lastInput: String | null = null;
+let insertLock = false;
 
 type InitializeRequest = {
   cc: 0x05,
@@ -53,9 +54,12 @@ function getLanguage() {
 }
 
 function handleMsgs(msgs: Buffer[]) {
+  insertLock = true;
   const msg = msgs.shift();
   if (msg) {
     handleResponse(parseResponse(msg)).then(() => handleMsgs(msgs));
+  } else {
+    insertLock = false;
   }
 }
 
@@ -275,6 +279,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (vscode.window.activeTextEditor?.document.languageId) {
       connect(getSocketPath(), socketSetup);
       vscode.workspace.onDidChangeTextDocument(function(event) {
+        if (insertLock) return;
         for (const contentChange of event.contentChanges) {
           const textAdded = contentChange.text.trim();
           if (textAdded.length === 0) {
