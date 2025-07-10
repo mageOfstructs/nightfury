@@ -116,19 +116,49 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
   }
 }
 
+function isSingleByteResponse(respId: number): boolean {
+  switch (respId) {
+    case 0:
+    case 2:
+    case 5:
+      return true;
+    default:
+      return false;
+  }
+}
+
 function splitBufIntoMessages(raw: Buffer): Buffer[] {
   const messages = [];
   let prev = 0;
+  let buf;
   for (let i = 0; i < raw.length; i++) {
-    if (raw.at(i)! < 0x8) {
-      const buf = Buffer.allocUnsafe(i - prev + 1);
-      raw.copy(buf, 0, prev, i + 1);
-      messages.push(buf);
-      prev = i + 1;
+    const curByte = raw.at(i)!;
+    switch (true) {
+      case curByte === 0x0:
+        buf = Buffer.allocUnsafe(i - prev + 1);
+        raw.copy(buf, 0, prev, i + 1);
+        prev = i + 1;
+        messages.push(buf);
+        break;
+      case curByte === 0x4:
+        buf = Buffer.allocUnsafe(2);
+        raw.copy(buf, 0, i, (i + 2));
+        prev = i + 2;
+        i++;
+        messages.push(buf);
+        break;
+      case isSingleByteResponse(curByte):
+        buf = Buffer.allocUnsafe(1);
+        raw.copy(buf, 0, i, i + 1);
+        prev = i + 1;
+        messages.push(buf);
+        break;
+      case curByte < 0x8:
+        prev = i;
     }
   }
   console.log("messages:");
-  console.log(messages);
+  messages.forEach(msg => console.log('\t', msg));
   return messages;
 }
 function parseResponse(raw: Buffer): Response {
