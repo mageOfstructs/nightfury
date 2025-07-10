@@ -32,8 +32,9 @@ const Advance = function(text: string): AdvanceRequest {
 type OkResponse = { cc: 0x0 };
 type ErrorResponse = { cc: 0x1, msg: string };
 type RegexFullResposne = { cc: 0x2 };
+type CursorHandleResponse = { cc: 0x4, handle: number };
 type ExpandedResponse = { cc: null, expanded: string };
-type Response = OkResponse | ErrorResponse | RegexFullResposne | ExpandedResponse;
+type Response = OkResponse | ErrorResponse | RegexFullResposne | CursorHandleResponse | ExpandedResponse;
 
 function connect(path: string, callback: (socket: net.Socket) => void): net.Socket | null {
   access(path, constants.F_OK, (err) => {
@@ -140,6 +141,8 @@ function parseResponse(raw: Buffer): Response {
       return ret;
     case 0x1:
       return { cc: id!, msg: raw.toString('utf8', 1, raw.length - 1) };
+    case 0x4:
+      return { cc: id!, handle: raw.at(1)! };
     default:
       ret = { cc: null, expanded: raw.toString('utf8', 0, raw.length - 1) };
       return ret;
@@ -158,7 +161,7 @@ async function handleResponse(response: Response) {
       console.log("inserting space");
       await insertExpansion(' ', true);
       return;
-    default:
+    case null:
       console.log(`inserting '${response.expanded}'`);
       await insertExpansion(response.expanded);
   }
