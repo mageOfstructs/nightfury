@@ -23,10 +23,10 @@ type Request = InitializeRequest | AdvanceRequest;
 
 const Initialize = function(lang: string): InitializeRequest {
   return { cc: 0x05, lang };
-}
+};
 const Advance = function(text: string): AdvanceRequest {
   return { cc: null, text };
-}
+};
 
 type OkResponse = { cc: 0x0 };
 type ErrorResponse = { cc: 0x1, msg: string };
@@ -83,9 +83,11 @@ function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined 
   if (!curLineLen) {
     return undefined;
   }
-  let [startLine, startChar] = [pos.line, pos.character];
+  let startChar, endChar;
+  startChar = endChar = pos.character;
+  let line = pos.line;
   let tmp;
-  while ((tmp = getChar(startLine, startChar)) && !/\s/.test(tmp)) {
+  while ((tmp = getChar(line, startChar)) && !/\s/.test(tmp)) {
     if (startChar > 0) startChar--;
     else {
       break;
@@ -94,14 +96,13 @@ function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined 
   if (tmp && /\s/.test(tmp)) {
     startChar++;
   }
-  let [endLine, endChar] = [pos.line, pos.character];
-  while ((tmp = getChar(endLine, endChar)) && !/\s/.test(tmp)) {
+  while ((tmp = getChar(line, endChar)) && !/\s/.test(tmp)) {
     if (endChar < curLineLen) endChar++;
     else {
       break;
     }
   }
-  return new vscode.Range(startLine, startChar, endLine, endChar);
+  return new vscode.Range(line, startChar, line, endChar);
 }
 
 async function insertExpansion(expaned: string, insert: boolean = false) {
@@ -119,8 +120,6 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
       console.log(document.lineAt(curPos.line).text[curPos.character]);
       const range = getWordRangeAtPosition(curPos);
       console.log(range);
-      // hack to keep userdefineds from being overwritten
-      // probably need a new protocol message saying the userdefined was completed
       if (range) {
         if (!insert) {
           console.log(`replacing '${document.getText(range)}'`);
