@@ -58,7 +58,7 @@ fn main() -> std::io::Result<()> {
     if let Ok(root) = frontend::create_graph_from_ebnf(&ebnf) {
         debug_println!("FSM:");
         root.borrow().dbg();
-        debug_println!("FSM node cnt: {}", FSMNode::node_cnt(&root));
+        debug_println!("FSM node cnt: {}", root.borrow().node_cnt());
         let mut cursor = FSMCursor::new(&root);
 
         let terminal = Term::stdout();

@@ -298,11 +298,11 @@ impl FSMNode {
     fn has_direct_child(&self, id: usize) -> bool {
         self.children.iter().find(|c| c.borrow().id == id).is_some()
     }
-    pub fn node_cnt(this: &FSMRc<FSMLock<FSMNode>>) -> usize {
+    pub fn node_cnt(&self) -> usize {
         let mut ret = 1; // one root node
-        this.walk_fsm_depth(
+        self.walk_fsm_depth(
             &mut |_, parent, _, _| {
-                ret += parent.borrow().children.len();
+                ret += parent.children.len();
                 false
             },
             true,
@@ -683,7 +683,7 @@ impl FSMNode {
         }
         ret
     }
-    pub fn handle_potential_conflict(&self, child: &FSMRc<FSMLock<FSMNode>>) -> bool {
+    pub fn handle_potential_conflict(&self, child: &FSMNodeWrapper) -> bool {
         let child_borrow = child.borrow();
         if let Keyword(keyword_struct) = &child_borrow.value {
             debug_println!("{:?}", self.value);
@@ -703,7 +703,7 @@ impl FSMNode {
                 return true;
             }
         } else if let Null = &child_borrow.value {
-            // println!("awa?");
+            // TODO: rewrite this with walk_fsm
             let mut ret = false;
             let mut visited_nodes = HashSet::new();
             // iterate over every child and return true if at least one had a conflict

@@ -154,7 +154,7 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<FSMLock<FSMNode>>, Str
             // UserdefCombos will want to know their Keyword children's first character to
             // properly be able to finish
             FSMNode::set_userdef_links(&root);
-            debug_println!("Total node cnt: {}", FSMNode::node_cnt(&root));
+            debug_println!("Total node cnt: {}", root.borrow().node_cnt());
             // for (name, term) in terminals.iter() {
             //     println!("Term {}", name);
             //     term.0.borrow().dbg();
