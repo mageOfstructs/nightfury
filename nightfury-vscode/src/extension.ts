@@ -8,7 +8,6 @@ import { access, accessSync, constants } from 'fs';
 import { error, warn } from 'console';
 
 const sockets: { [field: string]: net.Socket } = {};
-let lastInput: String | null = null;
 let insertLock = false;
 
 type InitializeRequest = {
@@ -105,6 +104,20 @@ function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined 
   return new vscode.Range(line, startChar, line, endChar);
 }
 
+let shortStartOff = 0;
+function getTextToReplace(cursorPos: vscode.Position): vscode.Range | undefined {
+  const shortStart = vscode.window.activeTextEditor?.document.positionAt(shortStartOff);
+  if (!shortStart) { return undefined; }
+  if (cursorPos?.isAfterOrEqual(shortStart)) {
+    const ret = new vscode.Range(shortStart, cursorPos);
+    return ret;
+  } else {
+    console.warn("cursorPos not after shortStart!");
+    console.log(shortStart);
+    console.log(cursorPos);
+  }
+}
+
 async function insertExpansion(expaned: string, insert: boolean = false) {
   console.log("inserting expansion...");
   const editor = vscode.window.activeTextEditor;
@@ -113,34 +126,36 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
     await editor.edit((editBuilder) => {
       console.log(editor.selections);
       let curPos = editor.selection.active;
-      if (document.lineAt(curPos.line).text.length <= curPos.character) {
-        curPos = curPos.translate(0, curPos.character - document.lineAt(curPos.line).text.length - 1);
+      // if (document.lineAt(curPos.line).text.length <= curPos.character) {
+      //   curPos = curPos.translate(0, curPos.character - document.lineAt(curPos.line).text.length - 1);
+      // }
+      if (document.positionAt(shortStartOff).isEqual(curPos)) {
+        curPos = curPos.translate(0, 1);
       }
-      console.log(curPos);
+      console.log(`shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`);
+      console.log(`curPos: ${JSON.stringify(curPos)}`);
       console.log(document.lineAt(curPos.line).text[curPos.character]);
-      const range = getWordRangeAtPosition(curPos);
-      console.log(range);
+      const range = getTextToReplace(curPos);
       if (range) {
         if (!insert) {
-          console.log(`replacing '${document.getText(range)}'`);
-          editBuilder.replace(range, expaned + " ");
+          console.log(`replacing '${document.getText(range)}' with '${expaned}'`);
+          editBuilder.replace(range, expaned);
+          console.log(`old shortStartOff: ${shortStartOff}`);
+          console.log(`shifting by ${expaned.length}`);
+          // this mean 
+          shortStartOff = document.offsetAt(curPos) + expaned.length - 1;
+          console.log(`new shortStartOff: ${shortStartOff}`);
         } else {
+          shortStartOff++;
           console.log(`inserting '${expaned}'`);
-          editBuilder.insert(curPos, expaned);
+          editBuilder.insert(document.positionAt(shortStartOff), expaned);
+          shortStartOff++;
         }
+        console.log(`new shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`)
+        // shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
       } else {
         console.warn("Range is undefined!");
-        // editBuilder.replace(editor.selection, expaned + " ");
       }
-      // if (range && expaned.startsWith(document.getText(range))) {
-      //   if (!insert) {
-      //     editBuilder.replace(range, expaned + " ");
-      //   }
-      // } else if (range) {
-      //   console.log(curPos);
-      // } else {
-      //   console.warn("Range is undefined!");
-      // }
     });
   } else {
     console.warn("editor is undefined!");
@@ -210,9 +225,15 @@ function parseResponse(raw: Buffer): Response {
   }
 }
 async function handleResponse(response: Response) {
-  console.log(vscode.window.activeTextEditor?.document.lineAt(0));
+  const document = vscode.window.activeTextEditor?.document;
+  if (document) {
+    console.log(document.lineAt(0));
+  }
   switch (response.cc) {
     case 0x0:
+      if (lastReq && !lastReq.cc && document) {
+        shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
+      }
       console.log("Last request succeeded!");
       return;
     case 0x1:
@@ -223,7 +244,7 @@ async function handleResponse(response: Response) {
       await insertExpansion(' ', true);
       return;
     case null:
-      console.log(`inserting '${response.expanded}'`);
+      console.log(`expanding to '${response.expanded}'`);
       await insertExpansion(response.expanded);
   }
 }
@@ -278,19 +299,17 @@ export function activate(context: vscode.ExtensionContext) {
     if (vscode.window.activeTextEditor?.document.languageId) {
       connect(getSocketPath(), socketSetup);
       vscode.workspace.onDidChangeTextDocument(function(event) {
-        if (insertLock) return;
+        if (insertLock) return; // so we don't trigger on the events we produced
         for (const contentChange of event.contentChanges) {
-          const textAdded = contentChange.text.trim();
+          const textAdded = contentChange.text.trim(); // NOTE: bandaid, need better checking as the fsm starts to support whitespace input
           if (textAdded.length === 0) {
             continue;
           }
 
           sendChar(textAdded, (err) => {
             if (err) {
-              error("sendChar callback:");
+              console.error("sendChar callback:");
               console.error(err);
-            } else {
-              lastInput = textAdded;
             }
           });
         }
@@ -334,7 +353,7 @@ function sendChar(char: string, callback?: ((err?: Error | null) => void) | unde
   send(reqObj, callback);
 }
 
-let lastReq = {};
+let lastReq: Request | null = null;
 function send(req: Request, callback?: ((err?: Error | null) => void) | undefined) {
   lastReq = req;
   const buf = buildRequest(req);

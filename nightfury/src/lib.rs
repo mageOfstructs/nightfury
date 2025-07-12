@@ -1,10 +1,10 @@
-#![feature(let_chains)]
 #![feature(if_let_guard)]
 #![feature(trait_alias)]
 #![feature(impl_trait_in_bindings)]
 #![feature(lock_value_accessors)]
 #![feature(pattern)]
 #![feature(buf_read_has_data_left)]
+#![feature(test)]
 
 use debug_print::debug_println;
 use fsm::NodeType::{self, *};
@@ -23,6 +23,8 @@ mod fsm;
 pub use fsm::FSMNodeWrapper;
 
 pub mod protocol;
+
+mod esc_seq;
 
 thread_local! {
     static CNT: RefCell<usize> = RefCell::new(0);
@@ -840,6 +842,7 @@ mod tests {
         assert_eq!("e", cursor.advance('e').unwrap());
         assert!(cursor.is_done());
     }
+    #[test]
     fn test_minify() {
         let root = FSMNode::new_null(None);
         let child = FSMNode::new_null(Some(&root));

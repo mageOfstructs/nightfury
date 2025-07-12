@@ -7,6 +7,7 @@ use std::str::pattern::Pattern;
 use super::FSMLock;
 use super::get_id;
 use crate::NameShortener;
+use crate::esc_seq::resolve_escape_sequences;
 
 pub type FSMNodeWrapper = FSMRc<FSMLock<FSMNode>>;
 trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut isize) -> bool;
@@ -469,8 +470,8 @@ impl FSMNode {
             }
         }
     }
-    fn get_all_leaves(&self, discovered_leaves: &mut Vec<FSMRc<FSMLock<FSMNode>>>) {
-        FSMRc::new(FSMLock::new(self.clone())).walk_fsm(
+    fn get_all_leaves(this: &FSMNodeWrapper, discovered_leaves: &mut Vec<FSMNodeWrapper>) {
+        this.walk_fsm(
             &mut |visited_nodes, _, child, _| {
                 if discovered_leaves
                     .iter()
@@ -509,12 +510,9 @@ impl FSMNode {
             false,
         );
     }
-    pub fn add_child_to_all_leaves(
-        this: &FSMRc<FSMLock<FSMNode>>,
-        child: &FSMRc<FSMLock<FSMNode>>,
-    ) {
+    pub fn add_child_to_all_leaves(this: &FSMNodeWrapper, child: &FSMNodeWrapper) {
         let mut leaves = Vec::new();
-        this.borrow().get_all_leaves(&mut leaves);
+        FSMNode::get_all_leaves(this, &mut leaves);
         while let Some(node) = leaves.pop() {
             FSMNode::add_child_cycle_safe(&node, child);
             // NOTE: hopefully this isn't needed anymore
@@ -790,24 +788,24 @@ impl ToCSV for NodeType {
             let mut iter = csv.split(Self::FIELD_DELIM);
             let regex = Regex::new(&iter.next().expect("invalid NodeType format")[1..])
                 .expect("invalid Regex format");
-            let mut final_tokens = Vec::new();
-            iter.for_each(|ft| final_tokens.push(ft.chars().nth(0).unwrap()));
+            let mut final_tokens = Vec::with_capacity((csv.len() - regex.as_str().len()) / 2);
+            final_tokens.extend(iter.map(|s| s.chars().nth(0).expect("empty closing_token field")));
             UserDefinedCombo(regex, final_tokens)
         } else {
-            let parts: Vec<_> = csv.split(Self::FIELD_DELIM).collect();
-            if parts.len() < 3 {
-                Keyword(Keyword {
-                    short: parts[0].to_owned(),
-                    expanded: parts[1].to_owned(),
-                    closing_token: None,
-                })
-            } else {
-                Keyword(Keyword {
-                    short: parts[0].to_owned(),
-                    expanded: parts[1].to_owned(),
-                    closing_token: Some(parts[3].to_owned()),
-                })
-            }
+            let mut parts = csv
+                .split(Self::FIELD_DELIM)
+                .map(|field| resolve_escape_sequences(field));
+            let short = parts
+                .next()
+                .expect("keyword from_csv: missing short field!");
+            let expanded = parts
+                .next()
+                .expect("keyword from_csv: missing expanded field!");
+            Keyword(Keyword {
+                short,
+                expanded,
+                closing_token: parts.next(),
+            })
         }
     }
 }

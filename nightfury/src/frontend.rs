@@ -40,18 +40,15 @@ fn handle_node(
                     TerminalState::Stub => term.0.clone(),
                     TerminalState::Created => term.0.borrow().deep_clone(),
                 };
-                println!("linking back to {}", term_clone.borrow().short_id());
+                debug_println!("linking back to {}", term_clone.borrow().short_id());
                 FSMNode::add_child_cycle_safe(cur_root, &term_clone);
-                println!("after add:");
+                debug_println!("after add:");
                 cur_root.borrow().dbg();
                 term_clone
             } else {
                 debug_println!("Creating terminal {name}...");
-                let terminal = find_terminal(&grammar, &name);
-                if terminal.is_none() {
-                    panic!("Terminal reference '{name}' not found!");
-                }
-                let terminal = terminal.unwrap();
+                let terminal =
+                    find_terminal(&grammar, &name).expect("Terminal reference '{name}' not found!");
                 let term_root = FSMNode::new_null(None);
                 debug_println!("term_root: {}", term_root.borrow().short_id());
                 terminals.insert(
@@ -94,13 +91,14 @@ fn handle_node(
         }
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
             let t1 = handle_node(grammar, &n1.to_owned(), &cur_root, terminals);
-            let t2 = handle_node(grammar, &n2.to_owned(), &t1, terminals);
+            let _ = handle_node(grammar, &n2.to_owned(), &t1, terminals);
             t1
         }
         Node::Symbol(n1, SymbolKind::Alternation, n2) => {
-            let root = FSMNode::new_null(Some(cur_root));
-            let t1 = handle_node(grammar, &n1.to_owned(), &root, terminals);
-            let t2 = handle_node(grammar, &n2.to_owned(), &root, terminals);
+            let root = FSMNode::new_null(Some(cur_root)); // need this here otherwise minify will
+            // crash?
+            let _ = handle_node(grammar, &n1.to_owned(), &root, terminals);
+            let _ = handle_node(grammar, &n2.to_owned(), &root, terminals);
             let child = FSMNode::new_null(None);
             debug_println!("Alternation dummy child: {}", child.borrow().short_id());
             FSMNode::add_child_to_all_leaves(&root, &child);
