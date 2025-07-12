@@ -643,11 +643,9 @@ impl FSMNode {
     fn get_conflicting_node(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
         let res = self.walk_fsm_breadth(
             &mut |_, _, child, _| {
-                println!("awa?");
+                debug_println!("awa?");
                 match &child.value {
-                    Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => {
-                        return true;
-                    }
+                    Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => true,
                     _ => false,
                 }
             },
@@ -670,7 +668,6 @@ impl FSMNode {
                             &keyword_struct.expanded,
                         );
                         keyword_struct.short = new_short;
-                        debug_println!("conflict handler 2");
                         ret = true;
                         node.to_owned()
                     } else {
