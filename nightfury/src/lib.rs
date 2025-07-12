@@ -91,9 +91,6 @@ impl NameShortener {
                 // well screw you past me! It's actually vital for collisions between s1 and s2
                 // where s2.starts_with(s1) applies
             }
-            if full.len() < old.len() {
-                panic!("NS: There is nothing left...")
-            }
             let mut ret = old.to_string();
             ret.push_str(&full[old.len()..old.len() + 1]);
             ret
@@ -102,6 +99,22 @@ impl NameShortener {
         };
         debug_println!("Got {} instead of {old:?}", ret);
         ret
+    }
+    fn expand_existing(old: &mut String, full: &str) -> bool {
+        if old.len() < full.len() {
+            old.push_str(&full[old.len()..old.len() + 1]);
+            true
+        } else {
+            // needed to stop
+            // handle_potential_conflict getting into an infinite loop when
+            // we encounter a node where short == expanded
+            // handle_potential_conflict will just always return true, which
+            // will never end the while loop it's called in
+            // FIXME maybe, however a fix will probably have to rewrite a lot
+            // of code in frontend, removing all those pesky
+            // add_child_to_all_leaves calls
+            false
+        }
     }
 }
 
@@ -141,7 +154,7 @@ impl<T> FSMLock<T> {
         self.0.read().expect("FSMLock borrow()")
     }
     fn borrow_mut(&self) -> RwLockWriteGuard<'_, T> {
-        self.0.write().expect("FSMLock borrow()")
+        self.0.write().expect("FSMLock borrow_mut()")
     }
     fn new(val: T) -> Self {
         Self(RwLock::new(val))

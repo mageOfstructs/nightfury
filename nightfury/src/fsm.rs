@@ -643,15 +643,14 @@ impl FSMNode {
     fn get_conflicting_node(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
         let res = self.walk_fsm_breadth(
             &mut |_, _, child, _| {
-                debug_println!("awa?");
                 match &child.value {
+                    // shouldn't you also check nshort.starts_with(short)?
                     Keyword(Keyword { short: nshort, .. }) if short.starts_with(nshort) => true,
                     _ => false,
                 }
             },
             false,
         );
-        debug_println!("get_conflicting_node finish");
         res
     }
     fn handle_potential_conflict_internal(&self, child: &FSMRc<FSMLock<FSMNode>>) -> bool {
@@ -659,9 +658,10 @@ impl FSMNode {
         let mut ret = false;
         if let Keyword(Keyword { short: cshort, .. }) = &child_borrow.value {
             if let Some(node) = self.get_conflicting_node(cshort)
-                && node.borrow().value != child_borrow.value
+                && node.borrow().id != child_borrow.id
             {
                 node.replace_with(|node| {
+                    debug_println!("Old Node: {:?} {}", node.value, node.short_id());
                     if let Keyword(keyword_struct) = &mut node.value {
                         let new_short = NameShortener::expand(
                             Some(&keyword_struct.short),
@@ -669,6 +669,7 @@ impl FSMNode {
                         );
                         keyword_struct.short = new_short;
                         ret = true;
+                        debug_println!("New Node: {:?} {}", node.value, node.short_id());
                         node.to_owned()
                     } else {
                         panic!(
@@ -682,43 +683,39 @@ impl FSMNode {
     }
     pub fn handle_potential_conflict(&self, child: &FSMNodeWrapper) -> bool {
         let child_borrow = child.borrow();
-        if let Keyword(keyword_struct) = &child_borrow.value {
+        if let Keyword(_) = &child_borrow.value {
             debug_println!("{:?}", self.value);
             debug_println!("{:?}", child.borrow().value);
             if self.handle_potential_conflict_internal(child) {
-                let short =
-                    NameShortener::expand(Some(&keyword_struct.short), &keyword_struct.expanded);
                 drop(child_borrow);
+                let mut ret = false;
                 child.replace_with(|node| {
                     if let Keyword(k) = &mut node.value {
-                        k.short = short;
+                        ret = NameShortener::expand_existing(&mut k.short, &k.expanded);
                     } else {
                         unreachable!()
                     }
                     node.to_owned()
                 });
-                return true;
+                return ret;
             }
         } else if let Null = &child_borrow.value {
-            // TODO: rewrite this with walk_fsm
-            let mut ret = false;
-            let mut visited_nodes = HashSet::new();
-            // iterate over every child and return true if at least one had a conflict
-            for child in &child_borrow.children {
-                if !visited_nodes.contains(&child.borrow().id) {
-                    visited_nodes.insert(child.borrow().id);
-                    if self.handle_potential_conflict_internal(&child) {
-                        let mut mut_child = child.borrow_mut();
-                        if let Keyword(k) = &mut mut_child.value {
-                            k.short = NameShortener::expand(Some(&k.short), &k.expanded);
+            return child
+                .walk_fsm_breadth(
+                    &mut |_, _, child, _| {
+                        if self.handle_potential_conflict_internal(&child) {
+                            let mut mut_child = child.borrow_mut();
+                            if let Keyword(k) = &mut mut_child.value {
+                                return NameShortener::expand_existing(&mut k.short, &k.expanded);
+                            }
+                            false
+                        } else {
+                            false
                         }
-                        ret = true;
-                    }
-                }
-            }
-            if ret {
-                return true;
-            }
+                    },
+                    false,
+                )
+                .is_some();
         }
         false
     }
