@@ -35,11 +35,8 @@ Run the program in debug mode. Most of its output is debugging information, whic
 
 - `Keyword`: some keyword, has two important fields: `expanded` (the actual keyword) and `short` (the character sequence you need to type for it to be autocompleted)
   - Note: if nightfury can definitely determine what keyword should be inserted before you finish typing the entire short-sequence, it will insert it without needing you to finish typing the `short` sequence
-- `UserDefinedRegex`: section for a userdefined token, e.g. identifiers. Your input has to match the regex for it to be completed
-  - Note: in certain cases, nightfury can look ahead and insert the next keyword automatically, without you needing to type its `short` sequence
+- `UserDefinedCombo`: section for a userdefined token, e.g. identifiers. Consists of a regex (used for deciding which branch to take) and an array of characters called "final_tokens" (used to determine when the userdefined token is completed)
 - `Null`: placeholder node, used to either combine paths or split them apart
-
-*Sidenote: there is technically another type,* `UserDefined`, *which marks userdefined areas that are explicitly terminated by a character. It's unused as EBNF doesn't have a way of expressing such a thing right now.*
 
 The indentation shows you the general flow of the graph. If you see a "Cycle to ID", then that means there is a node link that cannot cleanly be displayed in the tree view (e.g. cycles)
 
@@ -48,3 +45,4 @@ The indentation shows you the general flow of the graph. If you see a "Cycle to 
 - `nightfury`: the main lib crate; provides the main API for completions
 - `nigthfury-server`: server frontend that can take commands in JSON-Format over a UNIX socket and manipulate the internal FSMs
 - `nightfury-cli`: cli containing helper methods for generating nightfury fsms as well as server debugging
+- `nightfury-vscode`: source code for the visual studio integration extension
