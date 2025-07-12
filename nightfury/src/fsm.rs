@@ -11,7 +11,7 @@ use crate::esc_seq::resolve_escape_sequences;
 
 pub type FSMNodeWrapper = FSMRc<FSMLock<FSMNode>>;
 trait FSMOp = FnMut(&mut HashSet<NodeId>, &FSMNodeWrapper, &FSMNodeWrapper, &mut isize) -> bool;
-trait FSMUnsafe = Fn(&mut HashSet<NodeId>, &FSMNode, &FSMNode, &mut isize) -> bool;
+trait FSMUnsafe = FnMut(&mut HashSet<NodeId>, &FSMNode, &FSMNode, &mut isize) -> bool;
 pub trait CycleAwareOp<T> {
     fn walk_fsm(&self, op: &mut T, greedy: bool, depth_search: bool) -> Option<FSMNodeWrapper>;
     fn walk_fsm_internal(
@@ -52,9 +52,9 @@ where
         depth_search: bool,
         visited_nodes: &mut HashSet<NodeId>,
     ) -> Option<FSMNodeWrapper> {
-        let children = self.children.clone();
+        let children = &self.children;
         let mut c_idx = 0;
-        for child in children.iter() {
+        for child in children {
             if !visited_nodes.contains(&child.borrow().id) {
                 if depth_search {
                     visited_nodes.insert(child.borrow().id);
@@ -180,7 +180,6 @@ impl Default for Keyword {
     }
 }
 
-// TODO: combine UserDefined and UserDefinedRegex into one variant
 #[derive(Debug, Clone)]
 pub enum NodeType {
     Keyword(Keyword),
