@@ -469,14 +469,13 @@ impl FSMNode {
             }
         }
     }
-    fn get_all_leaves(this: &FSMNodeWrapper, discovered_leaves: &mut Vec<FSMNodeWrapper>) {
+    fn get_all_leaves(
+        this: &FSMNodeWrapper,
+        discovered_leaves: &mut HashMap<NodeId, FSMNodeWrapper>,
+    ) {
         this.walk_fsm(
             &mut |visited_nodes, _, child, _| {
-                if discovered_leaves
-                    .iter()
-                    .find(|dl| dl.borrow().id == child.borrow().id)
-                    .is_some()
-                {
+                if discovered_leaves.contains_key(&child.borrow().id) {
                     return false;
                 }
                 if child.borrow().children.is_empty() {
@@ -485,7 +484,7 @@ impl FSMNode {
                         child.borrow().value,
                         child.borrow().short_id()
                     );
-                    discovered_leaves.push(child.clone());
+                    discovered_leaves.insert(child.borrow().id, child.clone());
                 } else {
                     let mut has_only_cycles = true;
                     for child in &child.borrow().children {
@@ -500,7 +499,7 @@ impl FSMNode {
                             child.borrow().value,
                             child.borrow().short_id()
                         );
-                        discovered_leaves.push(child.clone());
+                        discovered_leaves.insert(child.borrow().id, child.clone());
                     }
                 }
                 false
@@ -510,9 +509,10 @@ impl FSMNode {
         );
     }
     pub fn add_child_to_all_leaves(this: &FSMNodeWrapper, child: &FSMNodeWrapper) {
-        let mut leaves = Vec::new();
+        let mut leaves = HashMap::new();
         FSMNode::get_all_leaves(this, &mut leaves);
-        while let Some(node) = leaves.pop() {
+        let mut iter = leaves.values();
+        while let Some(node) = iter.next() {
             FSMNode::add_child_cycle_safe(&node, child);
             // NOTE: hopefully this isn't needed anymore
             // if node.borrow().children.is_empty() {
