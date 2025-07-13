@@ -261,9 +261,9 @@ impl FSMNode {
         if let Null = self.value { true } else { false }
     }
     fn deep_clone_internal(
-        stub: &FSMRc<FSMLock<Self>>,
+        stub: &FSMNodeWrapper,
         old: &FSMNode,
-        visited_nodes: &mut HashMap<usize, FSMRc<FSMLock<FSMNode>>>,
+        visited_nodes: &mut HashMap<usize, FSMNodeWrapper>,
     ) -> FSMRc<FSMLock<Self>> {
         for child in &old.children {
             if !visited_nodes.contains_key(&child.borrow().id) {
@@ -277,7 +277,7 @@ impl FSMNode {
             } else {
                 stub.borrow_mut()
                     .children
-                    .push(visited_nodes.get(&child.borrow().id).unwrap().clone());
+                    .push(visited_nodes[&child.borrow().id].clone());
             }
         }
         stub.clone()
@@ -333,16 +333,16 @@ impl FSMNode {
             },
             true,
         );
-        println!("{}", userdefs.len());
+        debug_println!("{}", userdefs.len());
         for userdef in userdefs {
-            println!(
+            debug_println!(
                 "{:?} {}",
                 userdef.borrow().value,
                 userdef.borrow().short_id()
             );
             userdef.walk_fsm_depth(
                 &mut |_, _, c, _| {
-                    println!("{:?} {}", c.borrow().value, c.borrow().short_id());
+                    debug_println!("{:?} {}", c.borrow().value, c.borrow().short_id());
                     if let Keyword(Keyword { short, .. }) = &c.borrow().value {
                         if let UserDefinedCombo(_, fcs) = &mut userdef.borrow_mut().value {
                             fcs.push(short.chars().nth(0).unwrap()); // bad handling, only possible when
