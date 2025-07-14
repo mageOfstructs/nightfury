@@ -37,6 +37,21 @@ impl<S: Write> WriteNullDelimitedExt for S {
     }
 }
 
+pub trait WriteResponse {
+    fn write_response(&mut self, resp: Response) -> IORes<()>;
+    fn write_err(&mut self, msg: &str) -> IORes<()> {
+        self.write_response(Response::RError(msg))
+    }
+    fn write_ok(&mut self) -> IORes<()> {
+        self.write_response(Response::Ok)
+    }
+}
+impl<S: Write> WriteResponse for S {
+    fn write_response(&mut self, resp: Response) -> IORes<()> {
+        resp.write(self)
+    }
+}
+
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Request<'a> {
