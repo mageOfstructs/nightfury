@@ -1,7 +1,7 @@
 main ::= { statement };
-statement ::= ( ( decl | assignment | fncall ) ';' ) | if | block | for | while;
+statement ::= ( ( decl | assignment | fncall ) ';\n' ) | if | block | for | while | function;
 
-decl ::= ( 'let' | 'var' | 'const' ) identifier '=' value;
+decl ::= ( 'let ' | 'var ' | 'const ' ) identifier '= ' value;
 identifier ::= #'[a-zA-Z][a-zA-Z0-9]*';
 literal ::= 'null' | 'undefined' | number | string | bool | function;
 bool ::= 'true' | 'false';
@@ -16,7 +16,7 @@ aop ::= '=' | '+=' | '-=' | '*=' | '/=';
 incdec ::= ( '++' | '--' );
 
 value ::= literal | identifier;
-block ::= '{' { statement } '}';
+block ::= '{\n\t' { statement } '}';
 
 if ::= 'if (' condition ')' block;
 condition ::= ( identifier | value ) { boolop ' ' ( identifier | value ) };
