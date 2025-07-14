@@ -1,18 +1,19 @@
 use debug_print::debug_println;
 use std::fmt::Display;
+use std::io::Result as IORes;
 use std::io::{self, BufRead, ErrorKind, Write};
 
 pub trait WriteNullDelimitedExt {
-    fn write_with_null(&mut self, data: &[u8]) -> std::io::Result<()>;
-    fn write_with_null_flush(&mut self, data: &[u8]) -> std::io::Result<()>;
+    fn write_with_null(&mut self, data: &[u8]) -> IORes<()>;
+    fn write_with_null_flush(&mut self, data: &[u8]) -> IORes<()>;
 }
 
 pub trait ReadUntilNullExt {
-    fn read_until_null(&mut self, buf: &mut String) -> std::io::Result<()>;
+    fn read_until_null(&mut self, buf: &mut String) -> IORes<()>;
 }
 
 impl<S: BufRead> ReadUntilNullExt for S {
-    fn read_until_null(&mut self, buf: &mut String) -> std::io::Result<()> {
+    fn read_until_null(&mut self, buf: &mut String) -> IORes<()> {
         let mut bytes_buf = Vec::with_capacity(buf.len());
         self.read_until(0, &mut bytes_buf)?;
         match str::from_utf8(&bytes_buf) {
@@ -24,12 +25,12 @@ impl<S: BufRead> ReadUntilNullExt for S {
 }
 
 impl<S: Write> WriteNullDelimitedExt for S {
-    fn write_with_null(&mut self, data: &[u8]) -> std::io::Result<()> {
+    fn write_with_null(&mut self, data: &[u8]) -> IORes<()> {
         self.write(data)?;
         self.write(&[0])?;
         Ok(())
     }
-    fn write_with_null_flush(&mut self, data: &[u8]) -> std::io::Result<()> {
+    fn write_with_null_flush(&mut self, data: &[u8]) -> IORes<()> {
         self.write_with_null(data)?;
         self.flush()?;
         Ok(())
