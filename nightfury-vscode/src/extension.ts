@@ -126,12 +126,7 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
     await editor.edit((editBuilder) => {
       console.log(editor.selections);
       let curPos = editor.selection.active;
-      // if (document.lineAt(curPos.line).text.length <= curPos.character) {
-      //   curPos = curPos.translate(0, curPos.character - document.lineAt(curPos.line).text.length - 1);
-      // }
-      if (document.positionAt(shortStartOff).isEqual(curPos)) {
-        curPos = curPos.translate(0, 1);
-      }
+      curPos = curPos.translate(0, 1);
       console.log(`shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`);
       console.log(`curPos: ${JSON.stringify(curPos)}`);
       console.log(document.lineAt(curPos.line).text[curPos.character]);
@@ -143,16 +138,14 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
           console.log(`old shortStartOff: ${shortStartOff}`);
           console.log(`shifting by ${expaned.length}`);
           // this mean 
-          shortStartOff = document.offsetAt(curPos) + expaned.length - 1;
+          shortStartOff = shortStartOff + expaned.length;
           console.log(`new shortStartOff: ${shortStartOff}`);
         } else {
-          shortStartOff++;
           console.log(`inserting '${expaned}'`);
           editBuilder.insert(document.positionAt(shortStartOff), expaned);
-          shortStartOff++;
+          shortStartOff += expaned.length;
         }
         console.log(`new shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`);
-        // shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
       } else {
         console.warn("Range is undefined!");
       }
@@ -231,9 +224,6 @@ async function handleResponse(response: Response) {
   }
   switch (response.cc) {
     case 0x0:
-      if (lastReq && !lastReq.cc && document) {
-        shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
-      }
       console.log("Last request succeeded!");
       return;
     case 0x1:
@@ -241,6 +231,9 @@ async function handleResponse(response: Response) {
       return;
     case 0x2:
       console.log("inserting space");
+      if (lastReq && !lastReq.cc && document) {
+        shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
+      }
       await insertExpansion(' ', true);
       return;
     case null:
