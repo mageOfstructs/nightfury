@@ -113,6 +113,7 @@ where
         visited_nodes: &mut HashSet<NodeId>,
     ) -> Option<FSMNodeWrapper> {
         let children = self.borrow().children.clone();
+        // TODO: should use a for loop using c_idx instead
         let mut c_idx = 0;
         for child in children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
@@ -153,6 +154,7 @@ where
     }
 }
 
+// FIXME: the strcpys take up a decent amount of time, maybe expanded can be made a reference?
 #[derive(Debug, Clone, PartialEq)]
 pub struct Keyword {
     pub short: String,
