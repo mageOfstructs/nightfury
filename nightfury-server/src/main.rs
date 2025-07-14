@@ -1,5 +1,5 @@
 #![feature(if_let_guard)]
-use lib::protocol::ReadRequest;
+use lib::protocol::{ReadRequest, WriteResponse};
 use lib::{AdvanceResult, FSMNodeWrapper, ToCSV, get_test_fsm};
 use std::collections::HashMap;
 use std::fs::{File, read_dir};
@@ -149,12 +149,16 @@ fn main() -> std::io::Result<()> {
                             Request::Initialize(ref name)
                                 if let Some(fsm) = fsms_clone.read().unwrap().get(*name) =>
                             {
+                                if cursors.len() == u8::MAX.into() {
+                                    server_err(&mut stream, "Cursor limit exceeded")?;
+                                    continue;
+                                }
                                 current_cursor = cursors.len();
                                 cursors.push(FSMCursor::new(fsm));
                                 Response::CursorHandle(cursors.len() as u8).write(&mut stream)?;
                             }
                             Request::Initialize(ref name) => {
-                                eprintln!("Unknown language '{name}'")
+                                server_err(&mut stream, &format!("Unknown language '{name}'"))?;
                             }
                             Request::GetCapabilities => {
                                 Response::Capabilities(
@@ -168,16 +172,19 @@ fn main() -> std::io::Result<()> {
                                 .write(&mut stream)?;
                             }
                             Request::SetCursor(chandle) => {
-                                if cursors.get(chandle as usize).is_some() {
-                                    current_cursor = chandle as usize;
+                                if cursors.len() > chandle.into() {
+                                    current_cursor = chandle.into();
                                 } else {
-                                    eprintln!("Invalid handle: {chandle}");
+                                    server_err(&mut stream, &format!("Invalid handle: {chandle}"))?;
                                 }
                             }
                             _ if let Some(mut cursor) = cursors.get_mut(current_cursor) => {
                                 handle_request(req, &mut cursor, &mut stream)?
                             }
-                            _ => eprintln!("Got {req:?} but don't have a cursor yet!"),
+                            _ => server_err(
+                                &mut stream,
+                                &format!("Got {req:?} but don't have a cursor yet!"),
+                            )?,
                         }
                         stream.flush().expect("stream flush");
                     }
@@ -198,4 +205,9 @@ fn main() -> std::io::Result<()> {
     });
     cleanup(&sock_addr);
     Ok(())
+}
+
+fn server_err(stream: &mut BufStream<UnixStream>, errmsg: &str) -> std::io::Result<()> {
+    eprintln!("{errmsg}");
+    stream.write_err(&errmsg)
 }
