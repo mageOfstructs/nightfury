@@ -161,18 +161,3 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<FSMLock<FSMNode>>, Str
         Err(err) => Err(err.to_string()),
     }
 }
-
-extern crate test;
-
-#[cfg(test)]
-mod tests {
-    use std::fs::read_to_string;
-
-    use super::*;
-    use test::Bencher;
-    #[bench]
-    fn benchmark(b: &mut Bencher) {
-        let ebnf = read_to_string("../js.ebnf").unwrap();
-        b.iter(|| create_graph_from_ebnf(&ebnf));
-    }
-}
