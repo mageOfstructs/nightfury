@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import net from 'net';
 import process from 'process';
 import { access, accessSync, constants } from 'fs';
-import { error, warn } from 'console';
+import { warn } from 'console';
 
 const sockets: { [field: string]: net.Socket } = {};
 let insertLock = false;
@@ -87,7 +87,7 @@ function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined 
   let line = pos.line;
   let tmp;
   while ((tmp = getChar(line, startChar)) && !/\s/.test(tmp)) {
-    if (startChar > 0) startChar--;
+    if (startChar > 0) { startChar--; }
     else {
       break;
     }
@@ -96,7 +96,7 @@ function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined 
     startChar++;
   }
   while ((tmp = getChar(line, endChar)) && !/\s/.test(tmp)) {
-    if (endChar < curLineLen) endChar++;
+    if (endChar < curLineLen) { endChar++; }
     else {
       break;
     }
@@ -151,7 +151,7 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
           editBuilder.insert(document.positionAt(shortStartOff), expaned);
           shortStartOff++;
         }
-        console.log(`new shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`)
+        console.log(`new shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`);
         // shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
       } else {
         console.warn("Range is undefined!");
@@ -299,7 +299,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (vscode.window.activeTextEditor?.document.languageId) {
       connect(getSocketPath(), socketSetup);
       vscode.workspace.onDidChangeTextDocument(function(event) {
-        if (insertLock) return; // so we don't trigger on the events we produced
+        if (insertLock) { return; } // so we don't trigger on the events we produced
         for (const contentChange of event.contentChanges) {
           const textAdded = contentChange.text.trim(); // NOTE: bandaid, need better checking as the fsm starts to support whitespace input
           if (textAdded.length === 0) {
