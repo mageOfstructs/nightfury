@@ -14,11 +14,14 @@ type InitializeRequest = {
   cc: 0x05,
   lang: string
 }
+type RevertRequest = {
+  cc: 0x03
+}
 type AdvanceRequest = {
   cc: null,
   text: string
 }
-type Request = InitializeRequest | AdvanceRequest;
+type Request = InitializeRequest | AdvanceRequest | RevertRequest;
 
 const Initialize = function(lang: string): InitializeRequest {
   return { cc: 0x05, lang };
@@ -294,6 +297,10 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.workspace.onDidChangeTextDocument(function(event) {
         if (insertLock) { return; } // so we don't trigger on the events we produced
         for (const contentChange of event.contentChanges) {
+          console.log(contentChange);
+          if (contentChange.rangeLength > 0 && contentChange.text === '') {
+
+          }
           const textAdded = contentChange.text.trim(); // NOTE: bandaid, need better checking as the fsm starts to support whitespace input
           if (textAdded.length === 0) {
             continue;
@@ -325,6 +332,10 @@ function buildRequest(req: Request) {
       buf.writeUint8(req.cc);
       buf.fill(req.lang, 1, req.lang.length + 1);
       buf.writeUint8(0, req.lang.length + 1);
+      return buf;
+    case 0x03:
+      buf = Buffer.allocUnsafe(1);
+      buf.fill(req.cc);
       return buf;
     default:
       buf = Buffer.allocUnsafe(req.text.length + 1);
