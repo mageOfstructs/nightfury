@@ -179,6 +179,7 @@ pub struct FSMCursor {
     did_revert: bool,
     unfinished_nodes: Vec<InternalCursor>,
     path: Vec<InternalCursor>,
+    path_bufs: Vec<String>,
 }
 
 /// offers more insight in what advancing the cursor did
@@ -507,11 +508,15 @@ impl FSMCursor {
     /// removes one character from the internal buffer, or jumps back to the previous node if the
     /// buffer is empty
     pub fn revert(&mut self) {
-        if self.input_buf.is_empty()
+        if self.input_buf.len() < 2 // avoid creating an empty input_buf
             && let Some(new_cursor_pos) = self.path.pop()
         {
-            // FIXME: does not revert input_buf
             self.cur_ast_pos = new_cursor_pos;
+            self.input_buf = self
+                .path_bufs
+                .pop()
+                .expect("path and path bufs have the same length");
+            self.input_buf.pop(); // remove the last char so we don't break the completion
         } else if !self.input_buf.is_empty() {
             self.input_buf.pop();
         }
@@ -519,6 +524,7 @@ impl FSMCursor {
 
     fn update_cursor(&mut self, node: &FSMRc<FSMLock<FSMNode>>) {
         self.path.push(self.cur_ast_pos.clone());
+        self.path_bufs.push(self.input_buf.clone());
         self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(&node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
