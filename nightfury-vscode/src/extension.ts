@@ -29,13 +29,17 @@ const Initialize = function(lang: string): InitializeRequest {
 const Advance = function(text: string): AdvanceRequest {
   return { cc: null, text };
 };
+const Revert = function(): RevertRequest {
+  return { cc: 0x03 };
+};
 
 type OkResponse = { cc: 0x0 };
 type ErrorResponse = { cc: 0x1, msg: string };
 type RegexFullResposne = { cc: 0x2 };
 type CursorHandleResponse = { cc: 0x4, handle: number };
+type InvalidCharResponse = { cc: 0x05 };
 type ExpandedResponse = { cc: null, expanded: string };
-type Response = OkResponse | ErrorResponse | RegexFullResposne | CursorHandleResponse | ExpandedResponse;
+type Response = OkResponse | ErrorResponse | RegexFullResposne | CursorHandleResponse | InvalidCharResponse | ExpandedResponse;
 
 function connect(path: string, callback: (socket: net.Socket) => void): net.Socket | null {
   access(path, constants.F_OK, (err) => {
@@ -121,6 +125,19 @@ function getTextToReplace(cursorPos: vscode.Position): vscode.Range | undefined 
   }
 }
 
+function getCursorPos(): vscode.Position | undefined {
+  return vscode.window.activeTextEditor?.selection.active;
+}
+async function removeLastChar() {
+  const res = await vscode.window.activeTextEditor?.edit((editBuilder) => {
+    const curPos = getCursorPos();
+    if (!curPos) {return;}
+    editBuilder.delete(new vscode.Range(curPos, curPos.translate(0, 1)));
+  });
+  if (!res) {
+    console.warn("removeLastChar failed!");
+  }
+}
 async function insertExpansion(expaned: string, insert: boolean = false) {
   console.log("inserting expansion...");
   const editor = vscode.window.activeTextEditor;
@@ -215,6 +232,8 @@ function parseResponse(raw: Buffer): Response {
       return { cc: id!, msg: raw.toString('utf8', 1, raw.length - 1) };
     case 0x4:
       return { cc: id!, handle: raw.at(1)! };
+    case 0x5:
+      return { cc: id! };
     default:
       ret = { cc: null, expanded: raw.toString('utf8', 0, raw.length - 1) };
       return ret;
@@ -238,6 +257,9 @@ async function handleResponse(response: Response) {
         shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
       }
       await insertExpansion(' ', true);
+      return;
+    case 0x5:
+      await removeLastChar();
       return;
     case null:
       console.log(`expanding to '${response.expanded}'`);
@@ -299,9 +321,10 @@ export function activate(context: vscode.ExtensionContext) {
         for (const contentChange of event.contentChanges) {
           console.log(contentChange);
           if (contentChange.rangeLength > 0 && contentChange.text === '') {
-
+            sendRevert();
+            continue;
           }
-          const textAdded = contentChange.text.trim(); // NOTE: bandaid, need better checking as the fsm starts to support whitespace input
+          const textAdded = contentChange.text;
           if (textAdded.length === 0) {
             continue;
           }
@@ -347,6 +370,10 @@ function buildRequest(req: Request) {
 
 function sendInit(name: string, callback?: ((err?: Error | null) => void) | undefined) {
   const reqObj = Initialize(name);
+  send(reqObj, callback);
+}
+function sendRevert(callback?: ((err?: Error | null) => void) | undefined) {
+  const reqObj = Revert();
   send(reqObj, callback);
 }
 
