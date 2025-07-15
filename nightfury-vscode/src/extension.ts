@@ -10,12 +10,17 @@ import { warn } from 'console';
 const sockets: { [field: string]: net.Socket } = {};
 let insertLock = false;
 
+enum RequestType {
+  Initialize = 5,
+  Revert = 3
+}
+
 type InitializeRequest = {
-  cc: 0x05,
+  cc: RequestType.Initialize,
   lang: string
 }
 type RevertRequest = {
-  cc: 0x03
+  cc: RequestType.Revert
 }
 type AdvanceRequest = {
   cc: null,
@@ -33,11 +38,18 @@ const Revert = function(): RevertRequest {
   return { cc: 0x03 };
 };
 
-type OkResponse = { cc: 0x0 };
-type ErrorResponse = { cc: 0x1, msg: string };
-type RegexFullResposne = { cc: 0x2 };
-type CursorHandleResponse = { cc: 0x4, handle: number };
-type InvalidCharResponse = { cc: 0x05 };
+enum ResponseType {
+  Ok = 0,
+  Error = 1,
+  RegexFull = 2,
+  CursorHandle = 4,
+  InvalidChar = 5
+}
+type OkResponse = { cc: ResponseType.Ok };
+type ErrorResponse = { cc: ResponseType.Error, msg: string };
+type RegexFullResposne = { cc: ResponseType.RegexFull };
+type CursorHandleResponse = { cc: ResponseType.CursorHandle, handle: number };
+type InvalidCharResponse = { cc: ResponseType.InvalidChar };
 type ExpandedResponse = { cc: null, expanded: string };
 type Response = OkResponse | ErrorResponse | RegexFullResposne | CursorHandleResponse | InvalidCharResponse | ExpandedResponse;
 
@@ -56,7 +68,10 @@ function connect(path: string, callback: (socket: net.Socket) => void): net.Sock
 }
 
 function getLanguage() {
-  return vscode.window.activeTextEditor?.document.languageId;
+  return getDocument()?.languageId;
+}
+function getDocument() {
+  return vscode.window.activeTextEditor?.document;
 }
 
 function handleMsgs(msgs: Buffer[]) {
@@ -82,7 +97,7 @@ const socketSetup = (socket: net.Socket) => {
 };
 
 function getChar(line: number, character: number): string | undefined {
-  return vscode.window.activeTextEditor?.document.lineAt(line)?.text.at(character);
+  return getDocument()?.lineAt(line)?.text.at(character);
 }
 function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined {
   const curLineLen = vscode.window.activeTextEditor?.document.lineAt(pos.line).text.length;
@@ -112,6 +127,7 @@ function getWordRangeAtPosition(pos: vscode.Position): vscode.Range | undefined 
 }
 
 let shortStartOff = 0;
+const prevShortStartOffs: number[] = [];
 function getTextToReplace(cursorPos: vscode.Position): vscode.Range | undefined {
   const shortStart = vscode.window.activeTextEditor?.document.positionAt(shortStartOff);
   if (!shortStart) { return undefined; }
@@ -131,8 +147,23 @@ function getCursorPos(): vscode.Position | undefined {
 async function removeLastChar() {
   const res = await vscode.window.activeTextEditor?.edit((editBuilder) => {
     const curPos = getCursorPos();
-    if (!curPos) {return;}
+    if (!curPos) { return; }
     editBuilder.delete(new vscode.Range(curPos, curPos.translate(0, 1)));
+  });
+  if (!res) {
+    console.warn("removeLastChar failed!");
+  }
+}
+async function removeText(startPos: vscode.Position) {
+  const res = await vscode.window.activeTextEditor?.edit((editBuilder) => {
+    const curPos = getCursorPos();
+    console.log(`startPos: ${JSON.stringify(startPos)}`);
+    console.log(`curPos: ${JSON.stringify(curPos)}`);
+    if (!curPos || curPos.isBeforeOrEqual(startPos)) {
+      console.warn("removeText: invalid positions!");
+    }
+    console.log("deleting");
+    editBuilder.delete(new vscode.Range(startPos, curPos!));
   });
   if (!res) {
     console.warn("removeLastChar failed!");
@@ -157,14 +188,11 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
           editBuilder.replace(range, expaned);
           console.log(`old shortStartOff: ${shortStartOff}`);
           console.log(`shifting by ${expaned.length}`);
-          // this mean 
-          shortStartOff = shortStartOff + expaned.length;
-          console.log(`new shortStartOff: ${shortStartOff}`);
         } else {
           console.log(`inserting '${expaned}'`);
           editBuilder.insert(document.positionAt(shortStartOff), expaned);
-          shortStartOff += expaned.length;
         }
+        updateShortStartOff(shortStartOff + expaned.length)
         console.log(`new shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`);
       } else {
         console.warn("Range is undefined!");
@@ -246,6 +274,10 @@ async function handleResponse(response: Response) {
   }
   switch (response.cc) {
     case 0x0:
+      if (lastReq?.cc === RequestType.Revert) {
+        await revert();
+        return;
+      }
       console.log("Last request succeeded!");
       return;
     case 0x1:
@@ -254,7 +286,7 @@ async function handleResponse(response: Response) {
     case 0x2:
       console.log("inserting space");
       if (lastReq && !lastReq.cc && document) {
-        shortStartOff = document.offsetAt(vscode.window.activeTextEditor!.selection.active);
+        updateShortStartOff(document.offsetAt(vscode.window.activeTextEditor!.selection.active));
       }
       await insertExpansion(' ', true);
       return;
@@ -262,9 +294,26 @@ async function handleResponse(response: Response) {
       await removeLastChar();
       return;
     case null:
+      if (lastReq?.cc === RequestType.Revert) {
+        console.log(prevShortStartOffs);
+        await revert();
+        return;
+      }
       console.log(`expanding to '${response.expanded}'`);
       await insertExpansion(response.expanded);
   }
+}
+
+async function revert() {
+  const document = getDocument();
+  await removeText(document!.positionAt(shortStartOff));
+  shortStartOff = prevShortStartOffs.pop()!;
+  console.log("Reverted!");
+}
+
+function updateShortStartOff(newSSO: number) {
+  prevShortStartOffs.push(shortStartOff);
+  shortStartOff = newSSO;
 }
 
 function getRuntimeDir(defaultDir?: string) {
@@ -321,7 +370,9 @@ export function activate(context: vscode.ExtensionContext) {
         for (const contentChange of event.contentChanges) {
           console.log(contentChange);
           if (contentChange.rangeLength > 0 && contentChange.text === '') {
-            sendRevert();
+            for (let i = 0; i < contentChange.rangeLength; i++) {
+              sendRevert();
+            }
             continue;
           }
           const textAdded = contentChange.text;
@@ -350,13 +401,13 @@ export function activate(context: vscode.ExtensionContext) {
 function buildRequest(req: Request) {
   let buf;
   switch (req.cc) {
-    case 0x05:
+    case RequestType.Initialize:
       buf = Buffer.allocUnsafe(req.lang.length + 2); // cc + NUL
       buf.writeUint8(req.cc);
       buf.fill(req.lang, 1, req.lang.length + 1);
       buf.writeUint8(0, req.lang.length + 1);
       return buf;
-    case 0x03:
+    case RequestType.Revert:
       buf = Buffer.allocUnsafe(1);
       buf.fill(req.cc);
       return buf;
