@@ -257,8 +257,25 @@ impl FSMNode {
     pub fn set_is_done(&mut self, val: bool) {
         self.is_done = val;
     }
+    #[inline]
+    pub fn is_keyword(&self) -> bool {
+        if let Keyword(_) = self.value {
+            true
+        } else {
+            false
+        }
+    }
+    #[inline]
     pub fn is_null(&self) -> bool {
         if let Null = self.value { true } else { false }
+    }
+    #[inline]
+    pub fn is_userdef(&self) -> bool {
+        if let UserDefinedCombo(_, _) = self.value {
+            true
+        } else {
+            false
+        }
     }
     fn deep_clone_internal(
         stub: &FSMRc<FSMLock<Self>>,
