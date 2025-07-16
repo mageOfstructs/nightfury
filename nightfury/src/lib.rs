@@ -209,6 +209,9 @@ impl FSMCursor {
         self.unfinished_nodes.clear();
         self.path.clear();
     }
+    pub fn input_buf(&self) -> &str {
+        &self.input_buf
+    }
     fn handle_userdefined_combo(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
         if let Some(_) = child_idx {
