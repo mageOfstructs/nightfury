@@ -185,6 +185,8 @@ pub struct FSMCursor {
 /// offers more insight in what advancing the cursor did
 #[derive(Debug, PartialEq)]
 pub enum AdvanceResult {
+    /// returned after cursor reached a userdef node
+    UserDefStarted,
     /// returned after matching a Keyword directly after a userdef
     ExpandedAfterUserdef(String),
     /// ordinary Keyword match
@@ -479,8 +481,11 @@ impl FSMCursor {
                         NodeType::UserDefinedRegex(_) => None,
                         NodeType::UserDefinedCombo(_, f) => {
                             let res = self.handle_userdefined_combo(input, f);
-                            self.check_for_revert(
-                                res.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp)),
+                            Some(
+                                self.check_for_revert(
+                                    res.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp)),
+                                )
+                                .unwrap_or(AdvanceResult::UserDefStarted),
                             )
                         }
                         _ => unreachable!(),
@@ -1016,11 +1021,12 @@ mod tests {
     #[test]
     fn test_advancex() {
         let ebnf = r"
-        t1 ::= ( #'[0-9]' 'asdf' ) | ( 'test' );
+        t1 ::= ( #'[0-9]x?' 'asdf' ) | ( 'test' );
         ";
         let root = create_graph_from_ebnf(ebnf).unwrap();
         let mut cursor = FSMCursor::new(&root);
-        assert_eq!(None, cursor.advancex('0'));
+        assert_eq!(AdvanceResult::UserDefStarted, cursor.advancex('0').unwrap());
+        assert_eq!(None, cursor.advancex('x'));
         assert_eq!(
             AdvanceResult::ExpandedAfterUserdef("asdf".to_string()),
             cursor.advancex('a').unwrap()

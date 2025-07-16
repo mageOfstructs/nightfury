@@ -177,6 +177,7 @@ pub enum Response<'a> {
     Capabilities(Vec<&'a str>),
     CursorHandle(u8),
     InvalidChar,
+    RegexStart,
     Expanded(&'a str),
 }
 
@@ -205,6 +206,7 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
                 .map(|handle| Response::CursorHandle(*handle))
                 .ok_or(Error::Empty),
             0x05 => Ok(Response::InvalidChar),
+            0x06 => Ok(Response::RegexStart),
             _ => from_utf8_trim(&value).map(|str| Response::Expanded(str)),
         }
     }
@@ -217,7 +219,7 @@ impl<'a> Response<'a> {
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         debug_println!("res: {self:?}");
         let disc = self.discriminant();
-        if disc < 0x6 {
+        if disc < 0x7 {
             writer.write(&[disc])?;
         }
         match self {
