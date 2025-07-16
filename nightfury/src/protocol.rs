@@ -180,6 +180,13 @@ pub enum Response<'a> {
     Expanded(&'a str),
 }
 
+fn from_utf8(data: &[u8]) -> Result<&str, Error> {
+    str::from_utf8(data).map_err(|_| Error::InvalidEncoding)
+}
+fn from_utf8_trim(data: &[u8]) -> Result<&str, Error> {
+    from_utf8(&data[1..data.len() - 1])
+}
+
 impl<'a> TryFrom<&'a [u8]> for Response<'a> {
     type Error = Error;
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
@@ -188,21 +195,17 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
         }
         match value[0] {
             0x00 => Ok(Response::Ok),
-            0x01 => str::from_utf8(&value[1..value.len() - 1])
-                .map(|str| Response::RError(str))
-                .map_err(|_| Error::InvalidEncoding),
+            0x01 => from_utf8_trim(&value).map(|str| Response::RError(str)),
             0x02 => Ok(Response::RegexFull),
-            0x03 => str::from_utf8(&value[1..value.len() - 1])
-                .map(|str| Response::Capabilities(str.split(';').collect()))
-                .map_err(|_| Error::InvalidEncoding),
+            0x03 => {
+                from_utf8_trim(&value).map(|str| Response::Capabilities(str.split(';').collect()))
+            }
             0x04 => value
                 .get(1)
                 .map(|handle| Response::CursorHandle(*handle))
                 .ok_or(Error::Empty),
             0x05 => Ok(Response::InvalidChar),
-            _ => str::from_utf8(&value[1..value.len() - 1])
-                .map(|str| Response::Expanded(str))
-                .map_err(|_| Error::InvalidEncoding),
+            _ => from_utf8_trim(&value).map(|str| Response::Expanded(str)),
         }
     }
 }
