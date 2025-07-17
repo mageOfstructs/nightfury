@@ -8,7 +8,9 @@ import { access, accessSync, constants } from 'fs';
 import { warn } from 'console';
 
 const sockets: { [field: string]: net.Socket } = {};
+// TODO: make this support multiple files
 let insertLock = false;
+let currentlyInRegex = false;
 
 enum RequestType {
   Initialize = 5,
@@ -43,15 +45,18 @@ enum ResponseType {
   Error = 1,
   RegexFull = 2,
   CursorHandle = 4,
-  InvalidChar = 5
+  InvalidChar = 5,
+  RegexStart = 6,
 }
+type SingleByteResponse = { cc: ResponseType.Ok | ResponseType.RegexFull | ResponseType.RegexStart | ResponseType.InvalidChar };
 type OkResponse = { cc: ResponseType.Ok };
 type ErrorResponse = { cc: ResponseType.Error, msg: string };
 type RegexFullResposne = { cc: ResponseType.RegexFull };
+type RegexStartResponse = { cc: ResponseType.RegexStart };
 type CursorHandleResponse = { cc: ResponseType.CursorHandle, handle: number };
 type InvalidCharResponse = { cc: ResponseType.InvalidChar };
 type ExpandedResponse = { cc: null, expanded: string };
-type Response = OkResponse | ErrorResponse | RegexFullResposne | CursorHandleResponse | InvalidCharResponse | ExpandedResponse;
+type Response = OkResponse | ErrorResponse | RegexFullResposne | RegexStartResponse | CursorHandleResponse | InvalidCharResponse | ExpandedResponse;
 
 function connect(path: string, callback: (socket: net.Socket) => void): net.Socket | null {
   access(path, constants.F_OK, (err) => {
@@ -157,8 +162,8 @@ async function removeLastChar() {
 async function removeText(startPos: vscode.Position) {
   const res = await vscode.window.activeTextEditor?.edit((editBuilder) => {
     const curPos = getCursorPos();
-    console.log(`startPos: ${JSON.stringify(startPos)}`);
-    console.log(`curPos: ${JSON.stringify(curPos)}`);
+    printObj("startPos", startPos);
+    printObj("curPos", curPos);
     if (!curPos || curPos.isBeforeOrEqual(startPos)) {
       console.warn("removeText: invalid positions!");
     }
@@ -192,7 +197,7 @@ async function insertExpansion(expaned: string, insert: boolean = false) {
           console.log(`inserting '${expaned}'`);
           editBuilder.insert(document.positionAt(shortStartOff), expaned);
         }
-        updateShortStartOff(shortStartOff + expaned.length)
+        updateShortStartOff(shortStartOff + expaned.length);
         console.log(`new shortStart: ${JSON.stringify(document.positionAt(shortStartOff))}`);
       } else {
         console.warn("Range is undefined!");
@@ -208,6 +213,7 @@ function isSingleByteResponse(respId: number): boolean {
     case 0:
     case 2:
     case 5:
+    case 6:
       return true;
     default:
       return false;
@@ -254,14 +260,13 @@ function parseResponse(raw: Buffer): Response {
   switch (id) {
     case 0x0:
     case 0x2:
-      ret = { cc: id! };
-      return ret;
+    case 0x5:
+    case 0x6:
+      return { cc: id! };
     case 0x1:
       return { cc: id!, msg: raw.toString('utf8', 1, raw.length - 1) };
     case 0x4:
       return { cc: id!, handle: raw.at(1)! };
-    case 0x5:
-      return { cc: id! };
     default:
       ret = { cc: null, expanded: raw.toString('utf8', 0, raw.length - 1) };
       return ret;
@@ -278,20 +283,28 @@ async function handleResponse(response: Response) {
         await revert();
         return;
       }
+      if (currentlyInRegex) {
+        bumpSSOToCursor();
+      }
       console.log("Last request succeeded!");
       return;
     case 0x1:
       console.error(`Server Error: ${response.msg}`);
       return;
-    case 0x2:
-      console.log("inserting space");
+    case ResponseType.RegexFull:
+      console.log("Regex Full");
+      currentlyInRegex = false;
       if (lastReq && !lastReq.cc && document) {
         updateShortStartOff(document.offsetAt(vscode.window.activeTextEditor!.selection.active));
       }
       await insertExpansion(' ', true);
       return;
-    case 0x5:
+    case ResponseType.InvalidChar:
       await removeLastChar();
+      return;
+    case ResponseType.RegexStart:
+      currentlyInRegex = true;
+      console.log("Regex Start");
       return;
     case null:
       if (lastReq?.cc === RequestType.Revert) {
@@ -304,16 +317,33 @@ async function handleResponse(response: Response) {
   }
 }
 
+function printObj(name: string, obj: object | undefined) {
+  console.log(`${name}: ${JSON.stringify(obj)}`);
+}
+
 async function revert() {
-  const document = getDocument();
+  const document = getDocument()!;
+  const ssoPos = document.positionAt(shortStartOff);
+  const curPos = getCursorPos()!;
+  printObj("ssoPos", ssoPos);
+  printObj("curPos", curPos);
   await removeText(document!.positionAt(shortStartOff));
-  shortStartOff = prevShortStartOffs.pop()!;
+  shortStartOff = prevShortStartOffs.pop() ?? 0;
   console.log("Reverted!");
 }
 
 function updateShortStartOff(newSSO: number) {
   prevShortStartOffs.push(shortStartOff);
   shortStartOff = newSSO;
+}
+
+function bumpSSOToCursor() {
+  const document = getDocument();
+  if (!document) {
+    console.error("bumpSSOToCursor: document is undefined!");
+    return;
+  }
+  updateShortStartOff(document.offsetAt(vscode.window.activeTextEditor!.selection.active));
 }
 
 function getRuntimeDir(defaultDir?: string) {
@@ -429,9 +459,9 @@ function sendRevert(callback?: ((err?: Error | null) => void) | undefined) {
 }
 
 function sendChar(char: string, callback?: ((err?: Error | null) => void) | undefined) {
-  if (char.length > 1) { throw new Error("not a char!"); }
+  // if (char.length > 1) { throw new Error("not a char!"); }
 
-  const reqObj = Advance(char);
+  const reqObj = Advance(char[0]);
   send(reqObj, callback);
 }
 
