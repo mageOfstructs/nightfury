@@ -22,6 +22,12 @@ For example if there is an image subfolder under your extension project workspac
 - have nightfury-server installed and running
 - need $XDG_RUNTIME_DIR to be set (should already be in most cases)
 
+## Installation
+
+- Yes
+- Note: nightfury currently doesn't like vscode's Auto-Closing Brackets feature
+ - To disable it, go to Settings -> User -> Text Editor -> Auto-Closing Brackets and set it to "never"
+
 ## Extension Settings
 
 TODO
