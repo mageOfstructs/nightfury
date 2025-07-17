@@ -23,6 +23,7 @@ fn handle_request(
     match req {
         Request::Revert => {
             cursor.revert();
+            stream.write_response(Response::Expanded(cursor.input_buf()))?;
         }
         Request::Reset => {
             cursor.reset();
@@ -35,6 +36,7 @@ fn handle_request(
                     Response::Expanded(&s).write(stream)
                 }
                 Some(AdvanceResult::InvalidChar) => Response::InvalidChar.write(stream),
+                Some(AdvanceResult::UserDefStarted) => Response::RegexStart.write(stream),
                 None => Response::Ok.write(stream),
             })?;
         }
