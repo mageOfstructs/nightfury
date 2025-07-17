@@ -113,6 +113,7 @@ where
         visited_nodes: &mut HashSet<NodeId>,
     ) -> Option<FSMNodeWrapper> {
         let children = self.borrow().children.clone();
+        // TODO: should use a for loop using c_idx instead
         let mut c_idx = 0;
         for child in children.iter() {
             if !visited_nodes.contains(&child.borrow().id) {
@@ -153,6 +154,7 @@ where
     }
 }
 
+// FIXME: the strcpys take up a decent amount of time, maybe expanded can be made a reference?
 #[derive(Debug, Clone, PartialEq)]
 pub struct Keyword {
     pub short: String,
@@ -278,9 +280,9 @@ impl FSMNode {
         }
     }
     fn deep_clone_internal(
-        stub: &FSMRc<FSMLock<Self>>,
+        stub: &FSMNodeWrapper,
         old: &FSMNode,
-        visited_nodes: &mut HashMap<usize, FSMRc<FSMLock<FSMNode>>>,
+        visited_nodes: &mut HashMap<usize, FSMNodeWrapper>,
     ) -> FSMRc<FSMLock<Self>> {
         for child in &old.children {
             if !visited_nodes.contains_key(&child.borrow().id) {
@@ -294,7 +296,7 @@ impl FSMNode {
             } else {
                 stub.borrow_mut()
                     .children
-                    .push(visited_nodes.get(&child.borrow().id).unwrap().clone());
+                    .push(visited_nodes[&child.borrow().id].clone());
             }
         }
         stub.clone()
@@ -350,16 +352,16 @@ impl FSMNode {
             },
             true,
         );
-        println!("{}", userdefs.len());
+        debug_println!("{}", userdefs.len());
         for userdef in userdefs {
-            println!(
+            debug_println!(
                 "{:?} {}",
                 userdef.borrow().value,
                 userdef.borrow().short_id()
             );
             userdef.walk_fsm_depth(
                 &mut |_, _, c, _| {
-                    println!("{:?} {}", c.borrow().value, c.borrow().short_id());
+                    debug_println!("{:?} {}", c.borrow().value, c.borrow().short_id());
                     if let Keyword(Keyword { short, .. }) = &c.borrow().value {
                         if let UserDefinedCombo(_, fcs) = &mut userdef.borrow_mut().value {
                             fcs.push(short.chars().nth(0).unwrap()); // bad handling, only possible when
@@ -486,14 +488,13 @@ impl FSMNode {
             }
         }
     }
-    fn get_all_leaves(this: &FSMNodeWrapper, discovered_leaves: &mut Vec<FSMNodeWrapper>) {
+    fn get_all_leaves(
+        this: &FSMNodeWrapper,
+        discovered_leaves: &mut HashMap<NodeId, FSMNodeWrapper>,
+    ) {
         this.walk_fsm(
             &mut |visited_nodes, _, child, _| {
-                if discovered_leaves
-                    .iter()
-                    .find(|dl| dl.borrow().id == child.borrow().id)
-                    .is_some()
-                {
+                if discovered_leaves.contains_key(&child.borrow().id) {
                     return false;
                 }
                 if child.borrow().children.is_empty() {
@@ -502,7 +503,7 @@ impl FSMNode {
                         child.borrow().value,
                         child.borrow().short_id()
                     );
-                    discovered_leaves.push(child.clone());
+                    discovered_leaves.insert(child.borrow().id, child.clone());
                 } else {
                     let mut has_only_cycles = true;
                     for child in &child.borrow().children {
@@ -517,7 +518,7 @@ impl FSMNode {
                             child.borrow().value,
                             child.borrow().short_id()
                         );
-                        discovered_leaves.push(child.clone());
+                        discovered_leaves.insert(child.borrow().id, child.clone());
                     }
                 }
                 false
@@ -527,9 +528,10 @@ impl FSMNode {
         );
     }
     pub fn add_child_to_all_leaves(this: &FSMNodeWrapper, child: &FSMNodeWrapper) {
-        let mut leaves = Vec::new();
+        let mut leaves = HashMap::new();
         FSMNode::get_all_leaves(this, &mut leaves);
-        while let Some(node) = leaves.pop() {
+        let mut iter = leaves.values();
+        while let Some(node) = iter.next() {
             FSMNode::add_child_cycle_safe(&node, child);
             // NOTE: hopefully this isn't needed anymore
             // if node.borrow().children.is_empty() {

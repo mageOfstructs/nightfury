@@ -1,3 +1,6 @@
 [workspace]
 resolver = "3"
 members = ["nightfury", "nightfury-cli", "nightfury-server"]
+
+[profile.bench]
+debug = true
