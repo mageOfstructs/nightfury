@@ -8,7 +8,7 @@ bool ::= 'true' | 'false';
 number ::= #'[0-9]+(\\.[0-9]+)?';
 string ::= quote #'.*' quote;
 quote ::= ( '\\'' | '"' | '`' );
-function ::= 'function' ( identifier )? '(' ( identifier_list )? ')' block;
+function ::= 'function ' ( identifier )? '(' ( identifier_list )? ') ' block;
 identifier_list ::= identifier { ',' identifier };
 
 assignment ::= ( incdec )? identifier ( aop value ) | incdec;
@@ -16,11 +16,11 @@ aop ::= '=' | '+=' | '-=' | '*=' | '/=';
 incdec ::= ( '++' | '--' );
 
 value ::= literal | identifier;
-block ::= '{\n\t' { statement } '}';
+block ::= '{\n\t' { statement } '}\n';
 
 if ::= 'if (' condition ')' block;
 condition ::= ( identifier | value ) { boolop ' ' ( identifier | value ) };
-boolop ::= '&&' | '||';
+boolop ::= '&& ' | '|| ';
 while ::= 'while (' condition ')' block;
 for ::= 'for (' ( decl )? ';' condition ';' assignment ')' block;
 fncall ::= identifier '(' ( identifier_list )? ')';
