@@ -61,6 +61,7 @@ pub enum Request<'a> {
     Reset,
     Initialize(&'a str),
     SetCursor(u16),
+    Repeat(u8, Box<Request<'a>>),
     Advance(&'a str),
 }
 
@@ -111,10 +112,11 @@ impl<R: BufRead> ReadRequest for R {
 impl<'a> TryFrom<&'a [u8]> for Request<'a> {
     type Error = Error;
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        if value.is_empty() || value[0] == 0x0 {
+        if value.is_empty() {
             return Err(Error::Empty);
         }
         match value[0] {
+            0x00 => Err(Error::Empty),
             0x01 => Ok(Request::GetCapabilities),
             0x02 => todo!(),
             0x03 => Ok(Request::Revert),
@@ -135,7 +137,13 @@ impl<'a> TryFrom<&'a [u8]> for Request<'a> {
                 let cursor_handle = (value[1] as u16) << 8 | value[2] as u16;
                 Ok(Request::SetCursor(cursor_handle))
             }
-            _ => str::from_utf8(&value[..value.len() - 1])
+            0x07 => {
+                if value.len() < 3 {
+                    return Err(Error::Empty);
+                }
+                Request::try_from(&value[2..]).map(|req| Request::Repeat(value[1], Box::new(req)))
+            }
+            0x08.. => str::from_utf8(&value[..value.len() - 1])
                 .to_owned()
                 .map(|str| Request::Advance(str))
                 .map_err(|_| Error::InvalidEncoding),
@@ -149,7 +157,7 @@ impl<'a> Request<'a> {
     }
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let protocol_id = self.discriminant();
-        if protocol_id < 0x07 {
+        if protocol_id < 0x08 {
             writer.write(&[protocol_id])?;
         }
         match self {
@@ -161,6 +169,10 @@ impl<'a> Request<'a> {
                     (handle >> 8).try_into().unwrap(),
                     (handle & 8).try_into().unwrap(),
                 ])?;
+            }
+            Self::Repeat(cnt, req) => {
+                writer.write(&[*cnt])?;
+                req.write(writer)?;
             }
             _ => {}
         }
@@ -207,7 +219,8 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
                 .ok_or(Error::Empty),
             0x05 => Ok(Response::InvalidChar),
             0x06 => Ok(Response::RegexStart),
-            _ => from_utf8_trim(&value).map(|str| Response::Expanded(str)),
+            0x08.. => from_utf8_trim(&value).map(|str| Response::Expanded(str)),
+            _ => Err(Error::InvalidControlCode),
         }
     }
 }
