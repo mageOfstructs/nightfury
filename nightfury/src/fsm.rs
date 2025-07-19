@@ -185,12 +185,6 @@ impl Default for Keyword {
 #[derive(Debug, Clone)]
 pub enum NodeType {
     Keyword(Keyword),
-    #[deprecated]
-    UserDefined {
-        final_chars: Vec<char>,
-    },
-    #[deprecated]
-    UserDefinedRegex(Regex),
     UserDefinedCombo(Regex, Vec<char>),
     Null,
 }
@@ -200,14 +194,6 @@ impl PartialEq for NodeType {
         match self {
             Keyword(k) => match other {
                 Keyword(k2) => k.eq(k2),
-                _ => false,
-            },
-            UserDefined { final_chars: fc } => match other {
-                UserDefined { final_chars: fc2 } => fc.eq(fc2),
-                _ => false,
-            },
-            UserDefinedRegex(r) => match other {
-                UserDefinedRegex(r2) => r.as_str().eq(r2.as_str()),
                 _ => false,
             },
             UserDefinedCombo(r, f) => match other {
@@ -625,22 +611,6 @@ impl FSMNode {
         FSMNode::add_child_cycle_safe(&parent, &ret);
         ret
     }
-    pub fn find_node_with_code(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
-        for child in &self.children {
-            if let Keyword(Keyword { short: nshort, .. }) = &child.borrow().value
-                && nshort == short
-            {
-                return Some(FSMRc::clone(&child));
-            }
-        }
-        for child in &self.children {
-            let rec_res = child.borrow().find_node_with_code(short);
-            if rec_res.is_some() {
-                return rec_res;
-            }
-        }
-        None
-    }
 
     pub fn check_for_conflicts(&self, short: &str) -> bool {
         for child in &self.children {
@@ -787,7 +757,6 @@ impl ToCSV for NodeType {
                     })
                 )
             }
-            _ => panic!("FSMs with deprecated nodes will not be serialized!"),
         };
         ret.push(Self::ENTRY_DELIM);
         ret
