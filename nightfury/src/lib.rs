@@ -1049,4 +1049,141 @@ mod tests {
         assert_eq!(None, cursor.advance('0'));
         assert_eq!("=", cursor.advance('=').unwrap());
     }
+
+    #[repr(u8)]
+    enum EbnfConstruct {
+        Literal,
+        Regex,
+        Optional,
+    }
+    impl EbnfConstruct {
+        fn discriminator(&self) -> u8 {
+            self as *const Self as u8
+        }
+        fn get_next(mut cur_value: u8, cur_construct_idx: usize, terminals: usize) -> u8 {
+            let mut value_to_test = cur_value + 1;
+            // 3 = number of enum variants
+            while value_to_test < 3 {
+                let found = match EbnfConstruct::from(value_to_test) {
+                    Self::Optional => cur_construct_idx > 0,
+                    _ => true,
+                };
+                if found {
+                    cur_value = value_to_test;
+                    break;
+                }
+                value_to_test += 1;
+            }
+            // TODO: skipping rules will not apply when we hit the upper limit
+            cur_value
+        }
+        fn is_done(construct_idxs: &Vec<u8>) -> bool {
+            for i in 0..construct_idxs.len() {
+                if construct_idxs[i]
+                    != EbnfConstruct::get_next(construct_idxs[i], i, construct_idxs.len())
+                {
+                    println!(
+                        "{} != {}",
+                        construct_idxs[i],
+                        EbnfConstruct::get_next(construct_idxs[i], i, construct_idxs.len())
+                    );
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+    impl From<u8> for EbnfConstruct {
+        fn from(value: u8) -> Self {
+            match value {
+                0 => Self::Literal,
+                1 => Self::Regex,
+                2 => Self::Optional,
+                _ => unreachable!(),
+            }
+        }
+    }
+    impl ToString for EbnfConstruct {
+        fn to_string(&self) -> String {
+            match self {
+                Self::Literal => " 'asdf'".to_string(),
+                Self::Regex => " #'asdf'".to_string(),
+                Self::Optional => "?".to_string(),
+            }
+        }
+    }
+    fn add_next_construct(
+        ebnf: &mut String,
+        construct_idxs: &mut Vec<u8>,
+        cur_construct_idx: usize,
+    ) {
+        ebnf.push_str(&EbnfConstruct::from(construct_idxs[cur_construct_idx]).to_string());
+        let i = cur_construct_idx;
+        if (construct_idxs[i] as usize) < EBNF_CONSTRUCTS.len() - 1 {
+            construct_idxs[i] =
+                EbnfConstruct::get_next(construct_idxs[i], cur_construct_idx, construct_idxs.len());
+            for j in 0..i {
+                construct_idxs[j] = 0;
+            }
+        }
+    }
+
+    fn get_digits(mut value: usize, base: usize) -> Vec<usize> {
+        let mut ret = vec![];
+        while value > 0 {
+            ret.push(value % base);
+            value /= base;
+        }
+        ret
+    }
+
+    const EBNF_CONSTRUCTS: [&str; 2] = ["'asdf'", "('asdf')?"];
+    fn create_fsms(terminals: usize, recdepth: usize) -> Vec<FSMNodeWrapper> {
+        let mut ret = Vec::new();
+        let mut cur_ebnf = String::from("t1 ::=");
+
+        // TODO: a simple number is much better
+        let mut construct_idxs = vec![0u8; terminals];
+        while !EbnfConstruct::is_done(&construct_idxs) {
+            for i in 0..terminals {
+                add_next_construct(&mut cur_ebnf, &mut construct_idxs, i);
+                // cur_ebnf.push_str(&EBNF_CONSTRUCTS[construct_idxs[i]]);
+                // cur_ebnf.push(' ');
+            }
+            cur_ebnf.push(';');
+            println!("{cur_ebnf}");
+            // ret.push(create_graph_from_ebnf(&cur_ebnf).unwrap());
+            cur_ebnf.clear();
+            cur_ebnf.push_str("t1 ::=");
+
+            // for i in 0..construct_idxs.len() {
+            //     if construct_idxs[i] < EBNF_CONSTRUCTS.len() - 1 {
+            //         construct_idxs[i] += 1;
+            //         for j in 0..i {
+            //             construct_idxs[j] = 0;
+            //         }
+            //         cur_sum += 1;
+            //         break;
+            //     }
+            // }
+        }
+        println!("while done");
+        for i in 0..terminals {
+            add_next_construct(&mut cur_ebnf, &mut construct_idxs, i);
+            // cur_ebnf.push_str(&EBNF_CONSTRUCTS[construct_idxs[i]]);
+            // cur_ebnf.push(' ');
+        }
+        cur_ebnf.push(';');
+        println!("{cur_ebnf}");
+        // ret.push(create_graph_from_ebnf(&cur_ebnf).unwrap());
+        cur_ebnf.clear();
+        cur_ebnf.push_str("t1 ::= ");
+
+        ret
+    }
+
+    #[test]
+    fn one_test() {
+        create_fsms(2, 0);
+    }
 }
