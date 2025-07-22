@@ -4,7 +4,7 @@
 
 ## Project Goal
 
-The primary goal is to minimise the time programmers spent on typing syntax. It's aim is not to (fully) replace LSP, but to work alongside it.
+The primary goal is to minimise the time programmers spent on typing syntax. Its aim is not to (fully) replace LSP, but to work alongside it.
 
 ## Concept
 
