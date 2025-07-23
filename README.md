@@ -35,7 +35,7 @@ Run the program in debug mode. Most of its output is debugging information, whic
 
 - `Keyword`: some keyword, has two important fields: `expanded` (the actual keyword) and `short` (the character sequence you need to type for it to be autocompleted)
   - Note: if nightfury can definitely determine what keyword should be inserted before you finish typing the entire short-sequence, it will insert it without needing you to finish typing the `short` sequence
-- `UserDefinedCombo`: section for a userdefined token, e.g. identifiers. Consists of a regex (used for deciding which branch to take) and an array of characters called "final_tokens" (used to determine when the userdefined token is completed)
+- `UserDefinedCombo`: section for a user-defined token, e.g. identifiers. Consists of a regex (used for deciding which branch to take) and an array of characters called "final_tokens" (used to determine when the userdefined token is completed)
 - `Null`: placeholder node, used to either combine paths or split them apart
 
 The indentation shows you the general flow of the graph. If you see a "Cycle to ID", then that means there is a node link that cannot cleanly be displayed in the tree view (e.g. cycles)
