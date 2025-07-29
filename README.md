@@ -1,5 +1,13 @@
 # Nightfury
 
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/mageOfStructs/nightfury)
+![Deps.rs Crate Dependencies (nightfury)](https://img.shields.io/deps-rs/nightfury/latest?label=nightfury%20dependencies)
+![Deps.rs Crate Dependencies (nightfury-server)](https://img.shields.io/deps-rs/nightfury-server/latest?label=nightfury-server%20dependencies)
+![Deps.rs Crate Dependencies (nightfury-cli)](https://img.shields.io/deps-rs/nightfury-cli/latest?label=nightfury-cli%20dependencies)
+
+
+
+
 - automatic language-independent autocompletion engine relying on EBNF syntax
 
 ## Project Goal
