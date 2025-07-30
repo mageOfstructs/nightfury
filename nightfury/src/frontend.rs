@@ -9,9 +9,9 @@ use super::FSMRc;
 use crate::FSMNode;
 
 pub fn print_parsed_ebnf(syntax: &str) {
-    let grammar = ebnf::get_grammar(&syntax).unwrap();
+    let grammar = ebnf::get_grammar(syntax).unwrap();
     for node in grammar.expressions {
-        println!("{:?}", node);
+        println!("{node:?}");
     }
 }
 
@@ -27,7 +27,8 @@ fn handle_node(
     terminals: &mut HashMap<String, (FSMRc<FSMLock<FSMNode>>, TerminalState)>,
 ) -> FSMRc<FSMLock<FSMNode>> {
     debug_println!("handle_node got {:?}", cur_node);
-    let ret = match cur_node {
+    
+    match cur_node {
         Node::String(str) => {
             FSMNode::new_keyword_with_parent(str.to_string(), FSMRc::clone(cur_root))
         }
@@ -48,7 +49,7 @@ fn handle_node(
             } else {
                 debug_println!("Creating terminal {name}...");
                 let terminal =
-                    find_terminal(&grammar, &name).expect("Terminal reference '{name}' not found!");
+                    find_terminal(grammar, &name).expect("Terminal reference '{name}' not found!");
                 let term_root = FSMNode::new_null(None);
                 debug_println!("term_root: {}", term_root.borrow().short_id());
                 terminals.insert(
@@ -83,11 +84,11 @@ fn handle_node(
             let tree_bit = handle_node(grammar, *node, cur_root, terminals);
             let dummy = FSMNode::new_null(None);
             FSMNode::add_child_to_all_leaves(&tree_bit, &dummy);
-            FSMNode::add_child_cycle_safe(&cur_root, &dummy);
+            FSMNode::add_child_cycle_safe(cur_root, &dummy);
             tree_bit
         }
         Node::Symbol(n1, SymbolKind::Concatenation, n2) => {
-            let t1 = handle_node(grammar, *n1, &cur_root, terminals);
+            let t1 = handle_node(grammar, *n1, cur_root, terminals);
             let _ = handle_node(grammar, *n2, &t1, terminals);
             t1
         }
@@ -107,14 +108,14 @@ fn handle_node(
         Node::Repeat(node) => {
             // need to guarantee this is a null so search_rec won't prematurely stop, e.g. when
             // cur_root is a Keyword
-            let dummy_parent = FSMNode::new_null(Some(&cur_root));
+            let dummy_parent = FSMNode::new_null(Some(cur_root));
             let subroot = handle_node(grammar, *node, &dummy_parent, terminals);
 
             let dummy = FSMNode::new_null(None);
             debug_println!("Repeat dummy child: {}", dummy.borrow().short_id());
             FSMNode::add_child_to_all_leaves(&subroot, &dummy);
             // must have the option to skip it entirely
-            FSMNode::add_child_cycle_safe(&cur_root, &dummy);
+            FSMNode::add_child_cycle_safe(cur_root, &dummy);
 
             FSMNode::add_child_to_all_leaves(&subroot, &dummy_parent);
             dummy_parent
@@ -123,8 +124,7 @@ fn handle_node(
             eprintln!("Unimplemented: {cur_node:?}");
             todo!()
         }
-    };
-    ret
+    }
 }
 
 fn find_terminal<'a>(grammer: &'a Grammar, name: &'a str) -> Option<&'a Expression> {
@@ -137,7 +137,7 @@ pub fn create_graph_from_ebnf(ebnf: &str) -> Result<FSMRc<FSMLock<FSMNode>>, Str
     match ebnf::get_grammar(ebnf) {
         Ok(mut grammar) => {
             let root = FSMNode::new_null(None);
-            let root_node = grammar.expressions.get(0).ok_or("Empty BNF!")?.to_owned();
+            let root_node = grammar.expressions.first().ok_or("Empty BNF!")?.to_owned();
             let mut terminals = HashMap::with_capacity(grammar.expressions.len());
             handle_node(
                 &mut grammar,

@@ -6,7 +6,7 @@ use debug_print::debug_println;
 use lib::*;
 
 fn main() -> std::io::Result<()> {
-    let ebnf = r##"
+    let _ = r##"
         select_statement ::= 'SELECT' select_list 'FROM' table_reference [ where_clause ] ';';
         select_list ::= "*" | ( column_name { "," column_name } );
         
