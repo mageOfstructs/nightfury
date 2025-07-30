@@ -26,8 +26,8 @@ impl<S: BufRead> ReadUntilNullExt for S {
 
 impl<S: Write> WriteNullDelimitedExt for S {
     fn write_with_null(&mut self, data: &[u8]) -> IORes<()> {
-        self.write(data)?;
-        self.write(&[0])?;
+        self.write_all(data)?;
+        self.write_all(&[0])?;
         Ok(())
     }
     fn write_with_null_flush(&mut self, data: &[u8]) -> IORes<()> {
@@ -87,7 +87,7 @@ impl<R: BufRead> ReadRequest for R {
     fn read_request<'a>(&mut self, buf: &'a mut Vec<u8>) -> io::Result<Request<'a>> {
         buf.clear();
         let mut sbuf: [u8; 1] = [0];
-        self.read(&mut sbuf)?;
+        self.read_exact(&mut sbuf)?;
         buf.push(sbuf[0]);
         if buf[0] > 0x04 {
             self.read_until(0, buf)?;
@@ -137,7 +137,7 @@ impl<'a> TryFrom<&'a [u8]> for Request<'a> {
             }
             _ => str::from_utf8(&value[..value.len() - 1])
                 .to_owned()
-                .map(|str| Request::Advance(str))
+                .map(Request::Advance)
                 .map_err(|_| Error::InvalidEncoding),
         }
     }
@@ -145,16 +145,16 @@ impl<'a> TryFrom<&'a [u8]> for Request<'a> {
 
 impl<'a> Request<'a> {
     fn discriminant(&self) -> u8 {
-        return unsafe { *(self as *const Self as *const u8) } + 1u8;
+        (unsafe { *(self as *const Self as *const u8) } + 1u8)
     }
     pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
         let protocol_id = self.discriminant();
         if protocol_id < 0x07 {
-            writer.write(&[protocol_id])?;
+            writer.write_all(&[protocol_id])?;
         }
         match self {
             Self::Initialize(str) | Self::Advance(str) => {
-                writer.write_with_null(&str.as_bytes())?;
+                writer.write_with_null(str.as_bytes())?;
             }
             Self::SetCursor(handle) => {
                 writer.write_with_null(&[
@@ -196,10 +196,10 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
         }
         match value[0] {
             0x00 => Ok(Response::Ok),
-            0x01 => from_utf8_trim(&value).map(|str| Response::RError(str)),
+            0x01 => from_utf8_trim(value).map(Response::RError),
             0x02 => Ok(Response::RegexFull),
             0x03 => {
-                from_utf8_trim(&value).map(|str| Response::Capabilities(str.split(';').collect()))
+                from_utf8_trim(value).map(|str| Response::Capabilities(str.split(';').collect()))
             }
             0x04 => value
                 .get(1)
@@ -207,7 +207,7 @@ impl<'a> TryFrom<&'a [u8]> for Response<'a> {
                 .ok_or(Error::Empty),
             0x05 => Ok(Response::InvalidChar),
             0x06 => Ok(Response::RegexStart),
-            _ => from_utf8_trim(&value).map(|str| Response::Expanded(str)),
+            _ => from_utf8_trim(value).map(Response::Expanded),
         }
     }
 }
@@ -220,10 +220,10 @@ impl<'a> Response<'a> {
         debug_println!("res: {self:?}");
         let disc = self.discriminant();
         if disc < 0x7 {
-            writer.write(&[disc])?;
+            writer.write_all(&[disc])?;
         }
         match self {
-            Self::RError(msg) => writer.write_with_null(&msg.as_bytes()),
+            Self::RError(msg) => writer.write_with_null(msg.as_bytes()),
             Self::Capabilities(caps) => writer.write_with_null(
                 caps.iter()
                     .fold(String::with_capacity(caps.len() * 2), |mut acc, el| {

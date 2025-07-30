@@ -66,7 +66,7 @@ fn get_sock_addr() -> String {
 }
 
 fn cleanup(sock_addr: &str) {
-    std::fs::remove_file(&sock_addr).unwrap();
+    std::fs::remove_file(sock_addr).unwrap();
 }
 
 fn main() -> std::io::Result<()> {
@@ -148,8 +148,8 @@ fn main() -> std::io::Result<()> {
                     while let Ok(req) = stream.read_request(&mut buf) {
                         println!("req: {req:?}");
                         match req {
-                            Request::Initialize(ref name)
-                                if let Some(fsm) = fsms_clone.read().unwrap().get(*name) =>
+                            Request::Initialize(name)
+                                if let Some(fsm) = fsms_clone.read().unwrap().get(name) =>
                             {
                                 if cursors.len() == u8::MAX.into() {
                                     server_err(&mut stream, "Cursor limit exceeded")?;
@@ -180,8 +180,8 @@ fn main() -> std::io::Result<()> {
                                     server_err(&mut stream, &format!("Invalid handle: {chandle}"))?;
                                 }
                             }
-                            _ if let Some(mut cursor) = cursors.get_mut(current_cursor) => {
-                                handle_request(req, &mut cursor, &mut stream)?
+                            _ if let Some(cursor) = cursors.get_mut(current_cursor) => {
+                                handle_request(req, cursor, &mut stream)?
                             }
                             _ => server_err(
                                 &mut stream,
@@ -211,5 +211,5 @@ fn main() -> std::io::Result<()> {
 
 fn server_err(stream: &mut BufStream<UnixStream>, errmsg: &str) -> std::io::Result<()> {
     eprintln!("{errmsg}");
-    stream.write_err(&errmsg)
+    stream.write_err(errmsg)
 }

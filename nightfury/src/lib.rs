@@ -27,14 +27,14 @@ pub mod protocol;
 mod esc_seq;
 
 thread_local! {
-    static CNT: RefCell<usize> = RefCell::new(0);
+    static CNT: RefCell<usize> = const { RefCell::new(0) };
 }
 
 fn get_id() -> usize {
     let mut ret = 0;
     CNT.with_borrow(|cnt| ret = *cnt);
     CNT.with_borrow_mut(|cnt| *cnt += 1);
-    return ret;
+    ret
 }
 fn dbg_id() {
     debug_println!("{:?}", CNT);
@@ -214,9 +214,9 @@ impl FSMCursor {
     pub fn input_buf(&self) -> &str {
         &self.input_buf
     }
-    fn handle_userdefined_combo(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
+    fn handle_userdefined_combo(&mut self, input: char, final_chars: &[char]) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
-        if let Some(_) = child_idx {
+        if child_idx.is_some() {
             let strong_ref = self.get_cur_ast_binding();
             // let borrow = strong_ref.borrow();
             // let next_node = FSMRc::clone(&borrow.children[child_idx]);
@@ -229,7 +229,7 @@ impl FSMCursor {
                         && short.starts_with(input)
                     {
                         println!("handle_userdefined_combo: found another keyword!");
-                        self.update_cursor(&c);
+                        self.update_cursor(c);
                         self.input_buf.clear();
                         ret = Some(expanded.clone());
                         true
@@ -250,7 +250,7 @@ impl FSMCursor {
             None
         }
     }
-    fn handle_userdefined(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
+    fn handle_userdefined(&mut self, input: char, final_chars: &[char]) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
         if let Some(child_idx) = child_idx {
             let strong_ref = self.get_cur_ast_binding();
@@ -284,9 +284,8 @@ impl FSMCursor {
         treenode: &FSMRc<FSMLock<FSMNode>>,
     ) -> Option<FSMRc<FSMLock<FSMNode>>> {
         treenode.borrow().walk_fsm_breadth(
-            &mut |_, _, child, _| match &child.value {
-                UserDefinedCombo(regex, _) if regex.is_match(&self.input_buf) => true,
-                _ => false,
+            &mut |_, _, child, _| {
+                matches!(&child.value, UserDefinedCombo(regex, _) if regex.is_match(&self.input_buf))
             },
             false,
         )
@@ -382,7 +381,7 @@ impl FSMCursor {
             UserDefinedCombo(_, f) => {
                 let ret = self.handle_userdefined_combo(input, f);
                 if ret.is_some() {
-                    return ret.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp));
+                    return ret.map(AdvanceResult::ExpandedAfterUserdef);
                 }
             }
             _ => {
@@ -397,10 +396,8 @@ impl FSMCursor {
                         NodeType::UserDefinedCombo(_, f) => {
                             let res = self.handle_userdefined_combo(input, f);
                             Some(
-                                self.check_for_revert(
-                                    res.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp)),
-                                )
-                                .unwrap_or(AdvanceResult::UserDefStarted),
+                                self.check_for_revert(res.map(AdvanceResult::ExpandedAfterUserdef))
+                                    .unwrap_or(AdvanceResult::UserDefStarted),
                             )
                         }
                         _ => unreachable!(),
@@ -448,13 +445,13 @@ impl FSMCursor {
     fn update_cursor(&mut self, node: &FSMRc<FSMLock<FSMNode>>) {
         self.path.push(self.cur_ast_pos.clone());
         self.path_bufs.push(self.input_buf.clone());
-        self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(&node));
+        self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
             ..
         }) = &node.borrow().value
         {
-            self.unfinished_nodes.push(FSMRc::downgrade(&node));
+            self.unfinished_nodes.push(FSMRc::downgrade(node));
         } else if node.borrow().children.is_empty() && self.unfinished_nodes.len() > 1 {
             // we don't need to jump back if only one remains
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
@@ -487,10 +484,10 @@ impl FSMCursor {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
-        match self.get_cur_ast_binding().borrow().value {
-            NodeType::UserDefinedCombo(_, _) => true,
-            _ => false,
-        }
+        matches!(
+            self.get_cur_ast_binding().borrow().value,
+            NodeType::UserDefinedCombo(_, _)
+        )
     }
 
     fn get_current_nodeval(&self) -> NodeType {

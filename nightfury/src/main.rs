@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 // use std::{fs::File, io::Read, path::Path};
 use std::io::Write;
 
@@ -55,7 +53,7 @@ fn main() -> std::io::Result<()> {
     //     .unwrap()
     //     .read_to_string(&mut ebnf)
     //     .unwrap();
-    if let Ok(root) = frontend::create_graph_from_ebnf(&ebnf) {
+    if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
         debug_println!("FSM:");
         root.borrow().dbg();
         debug_println!("FSM node cnt: {}", root.borrow().node_cnt());
@@ -68,7 +66,7 @@ fn main() -> std::io::Result<()> {
                 '\x08' => cursor.clear_inputbuf(),
                 _ => {
                     if let Some(res) = cursor.advance(input) {
-                        print!("{} ", res);
+                        print!("{res} ");
                     }
                 }
             }

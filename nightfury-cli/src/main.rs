@@ -80,14 +80,14 @@ fn main() -> std::io::Result<()> {
             };
             match ebnf {
                 Ok(ebnf) => {
-                    let out = out.as_ref().map_or("./nightfury.fsm", |s| &s);
+                    let out = out.as_ref().map_or("./nightfury.fsm", |s| s);
                     let root = create_graph_from_ebnf(&ebnf);
                     match root {
                         Ok(root) => {
                             let out_file = File::create_new(out);
                             match out_file {
                                 Ok(mut out_file) => {
-                                    out_file.write_all(&root.to_csv().as_bytes())?;
+                                    out_file.write_all(root.to_csv().as_bytes())?;
                                 }
                                 Err(e) => eprintln!("{e}"),
                             }
@@ -156,7 +156,7 @@ fn main() -> std::io::Result<()> {
                             '\x08' => cursor.clear_inputbuf(),
                             _ => {
                                 if let Some(res) = cursor.advance(input) {
-                                    print!("{} ", res);
+                                    print!("{res} ");
                                 }
                             }
                         }
