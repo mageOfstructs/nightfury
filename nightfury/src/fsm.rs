@@ -155,7 +155,7 @@ where
 }
 
 // FIXME: the strcpys take up a decent amount of time, maybe expanded can be made a reference?
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Keyword {
     pub short: String,
     pub expanded: String,
@@ -172,25 +172,9 @@ impl Keyword {
     }
 }
 
-impl Default for Keyword {
-    fn default() -> Self {
-        Self {
-            short: String::new(),
-            expanded: String::new(),
-            closing_token: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum NodeType {
     Keyword(Keyword),
-    #[deprecated]
-    UserDefined {
-        final_chars: Vec<char>,
-    },
-    #[deprecated]
-    UserDefinedRegex(Regex),
     UserDefinedCombo(Regex, Vec<char>),
     Null,
 }
@@ -202,26 +186,12 @@ impl PartialEq for NodeType {
                 Keyword(k2) => k.eq(k2),
                 _ => false,
             },
-            UserDefined { final_chars: fc } => match other {
-                UserDefined { final_chars: fc2 } => fc.eq(fc2),
-                _ => false,
-            },
-            UserDefinedRegex(r) => match other {
-                UserDefinedRegex(r2) => r.as_str().eq(r2.as_str()),
-                _ => false,
-            },
             UserDefinedCombo(r, f) => match other {
                 UserDefinedCombo(r2, f2) => r.as_str().eq(r2.as_str()) && f.eq(f2),
                 _ => false,
             },
-            Null => match other {
-                Null => true,
-                _ => false,
-            },
+            Null => matches!(other, Null),
         }
-    }
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
     }
 }
 
@@ -261,23 +231,15 @@ impl FSMNode {
     }
     #[inline]
     pub fn is_keyword(&self) -> bool {
-        if let Keyword(_) = self.value {
-            true
-        } else {
-            false
-        }
+        matches!(self.value, Keyword(_))
     }
     #[inline]
     pub fn is_null(&self) -> bool {
-        if let Null = self.value { true } else { false }
+        matches!(self.value, Null)
     }
     #[inline]
     pub fn is_userdef(&self) -> bool {
-        if let UserDefinedCombo(_, _) = self.value {
-            true
-        } else {
-            false
-        }
+        matches!(self.value, UserDefinedCombo(_, _))
     }
     fn deep_clone_internal(
         stub: &FSMNodeWrapper,
@@ -285,12 +247,14 @@ impl FSMNode {
         visited_nodes: &mut HashMap<usize, FSMNodeWrapper>,
     ) -> FSMRc<FSMLock<Self>> {
         for child in &old.children {
-            if !visited_nodes.contains_key(&child.borrow().id) {
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                visited_nodes.entry(child.borrow().id)
+            {
                 let clone = FSMRc::new(FSMLock::new(Self {
                     value: child.borrow().value.clone(),
                     ..Default::default()
                 }));
-                visited_nodes.insert(child.borrow().id, clone.clone());
+                e.insert(clone.clone());
                 FSMNode::deep_clone_internal(&clone, &child.borrow(), visited_nodes);
                 stub.borrow_mut().children.push(clone);
             } else {
@@ -315,7 +279,7 @@ impl FSMNode {
         ret
     }
     fn has_direct_child(&self, id: usize) -> bool {
-        self.children.iter().find(|c| c.borrow().id == id).is_some()
+        self.children.iter().any(|c| c.borrow().id == id)
     }
     pub fn node_cnt(&self) -> usize {
         let mut ret = 1; // one root node
@@ -346,7 +310,7 @@ impl FSMNode {
         this.walk_fsm_breadth(
             &mut |_, p, _, _| {
                 if let UserDefinedCombo(_, _) = p.borrow().value {
-                    userdefs.push(FSMRc::clone(&p));
+                    userdefs.push(FSMRc::clone(p));
                 }
                 false
             },
@@ -362,11 +326,11 @@ impl FSMNode {
             userdef.walk_fsm_depth(
                 &mut |_, _, c, _| {
                     debug_println!("{:?} {}", c.borrow().value, c.borrow().short_id());
-                    if let Keyword(Keyword { short, .. }) = &c.borrow().value {
-                        if let UserDefinedCombo(_, fcs) = &mut userdef.borrow_mut().value {
-                            fcs.push(short.chars().nth(0).unwrap()); // bad handling, only possible when
-                            // there aren't any conflicts
-                        }
+                    if let Keyword(Keyword { short, .. }) = &c.borrow().value
+                        && let UserDefinedCombo(_, fcs) = &mut userdef.borrow_mut().value
+                    {
+                        fcs.push(short.chars().nth(0).unwrap()); // bad handling, only possible when
+                        // there aren't any conflicts
                     }
                     false
                 },
@@ -430,22 +394,18 @@ impl FSMNode {
     }
 
     pub fn has_useful_children(&self) -> bool {
-        self.walk_fsm_breadth(
-            &mut |_, _, c, _| match c.value {
-                Null => false,
-                _ => true,
-            },
-            false,
-        )
-        .is_some()
+        self.walk_fsm_breadth(&mut |_, _, c, _| !matches!(c.value, Null), false)
+            .is_some()
     }
 
     pub fn get_last_child(&self) -> Option<FSMRc<FSMLock<FSMNode>>> {
         self.children.last().cloned()
     }
     /// adds child to the children vector of self without doing collision checks first
+    /// # Safety
+    /// is able to create invalid fsms if collision detection is not handled elsewhere
     pub unsafe fn add_child_unsafe(&mut self, child: &FSMRc<FSMLock<FSMNode>>) {
-        self.children.push(FSMRc::clone(&child));
+        self.children.push(FSMRc::clone(child));
     }
     pub fn add_child(&mut self, child: &FSMRc<FSMLock<FSMNode>>) {
         while self.handle_potential_conflict(child) {}
@@ -455,7 +415,7 @@ impl FSMNode {
     }
     pub fn add_child_cycle_safe(this: &FSMRc<FSMLock<FSMNode>>, child: &FSMRc<FSMLock<FSMNode>>) {
         while this.borrow().handle_potential_conflict(child) {}
-        this.borrow_mut().children.push(FSMRc::clone(&child));
+        this.borrow_mut().children.push(FSMRc::clone(child));
     }
     pub fn new_null(parent: Option<&FSMRc<FSMLock<FSMNode>>>) -> FSMRc<FSMLock<Self>> {
         let ret = FSMRc::new(FSMLock::new(Self {
@@ -530,16 +490,16 @@ impl FSMNode {
     pub fn add_child_to_all_leaves(this: &FSMNodeWrapper, child: &FSMNodeWrapper) {
         let mut leaves = HashMap::new();
         FSMNode::get_all_leaves(this, &mut leaves);
-        let mut iter = leaves.values();
-        while let Some(node) = iter.next() {
-            FSMNode::add_child_cycle_safe(&node, child);
+        let iter = leaves.values();
+        for node in iter {
+            FSMNode::add_child_cycle_safe(node, child);
             // NOTE: hopefully this isn't needed anymore
             // if node.borrow().children.is_empty() {
             //     FSMNode::add_child_cycle_safe(&node, child);
             // }
         }
         if this.borrow().children.is_empty() {
-            FSMNode::add_child_cycle_safe(&this, child);
+            FSMNode::add_child_cycle_safe(this, child);
         }
     }
 
@@ -566,13 +526,12 @@ impl FSMNode {
     }
 
     pub fn new_id(value: NodeType, id: NodeId) -> FSMRc<FSMLock<Self>> {
-        let ret = FSMRc::new(FSMLock::new(Self {
+        FSMRc::new(FSMLock::new(Self {
             value,
             children: Vec::new(),
             id,
             ..Default::default()
-        }));
-        ret
+        }))
     }
 
     pub fn new(value: NodeType, parent: &FSMRc<FSMLock<FSMNode>>) -> FSMRc<FSMLock<Self>> {
@@ -625,22 +584,6 @@ impl FSMNode {
         FSMNode::add_child_cycle_safe(&parent, &ret);
         ret
     }
-    pub fn find_node_with_code(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
-        for child in &self.children {
-            if let Keyword(Keyword { short: nshort, .. }) = &child.borrow().value
-                && nshort == short
-            {
-                return Some(FSMRc::clone(&child));
-            }
-        }
-        for child in &self.children {
-            let rec_res = child.borrow().find_node_with_code(short);
-            if rec_res.is_some() {
-                return rec_res;
-            }
-        }
-        None
-    }
 
     pub fn check_for_conflicts(&self, short: &str) -> bool {
         for child in &self.children {
@@ -660,7 +603,7 @@ impl FSMNode {
     }
 
     fn get_conflicting_node(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
-        let res = self.walk_fsm_breadth(
+        self.walk_fsm_breadth(
             &mut |_, _, child, _| {
                 match &child.value {
                     // shouldn't you also check nshort.starts_with(short)?
@@ -669,17 +612,16 @@ impl FSMNode {
                 }
             },
             false,
-        );
-        res
+        )
     }
     fn handle_potential_conflict_internal(&self, child: &FSMRc<FSMLock<FSMNode>>) -> bool {
         let child_borrow = child.borrow();
         let mut ret = false;
-        if let Keyword(Keyword { short: cshort, .. }) = &child_borrow.value {
-            if let Some(node) = self.get_conflicting_node(cshort)
-                && node.borrow().id != child_borrow.id
-            {
-                node.replace_with(|node| {
+        if let Keyword(Keyword { short: cshort, .. }) = &child_borrow.value
+            && let Some(node) = self.get_conflicting_node(cshort)
+            && node.borrow().id != child_borrow.id
+        {
+            node.replace_with(|node| {
                     debug_println!("Old Node: {:?} {}", node.value, node.short_id());
                     if let Keyword(keyword_struct) = &mut node.value {
                         let new_short = NameShortener::expand(
@@ -696,7 +638,6 @@ impl FSMNode {
                         )
                     }
                 });
-            }
         }
         ret
     }
@@ -722,7 +663,7 @@ impl FSMNode {
             return child
                 .walk_fsm_breadth(
                     &mut |_, _, child, _| {
-                        if self.handle_potential_conflict_internal(&child) {
+                        if self.handle_potential_conflict_internal(child) {
                             let mut mut_child = child.borrow_mut();
                             if let Keyword(k) = &mut mut_child.value {
                                 return NameShortener::expand_existing(&mut k.short, &k.expanded);
@@ -755,8 +696,8 @@ pub trait ToCSV {
     where
         Self: Sized,
     {
-        File::open(&path)
-            .and_then(|file| read_to_string(file))
+        File::open(path)
+            .and_then(read_to_string)
             .map(|fsm| Self::from_csv(&fsm))
     }
 }
@@ -787,7 +728,6 @@ impl ToCSV for NodeType {
                     })
                 )
             }
-            _ => panic!("FSMs with deprecated nodes will not be serialized!"),
         };
         ret.push(Self::ENTRY_DELIM);
         ret
@@ -804,9 +744,7 @@ impl ToCSV for NodeType {
             final_tokens.extend(iter.map(|s| s.chars().nth(0).expect("empty closing_token field")));
             UserDefinedCombo(regex, final_tokens)
         } else {
-            let mut parts = csv
-                .split(Self::FIELD_DELIM)
-                .map(|field| resolve_escape_sequences(field));
+            let mut parts = csv.split(Self::FIELD_DELIM).map(resolve_escape_sequences);
             let short = parts
                 .next()
                 .expect("keyword from_csv: missing short field!");
@@ -900,7 +838,7 @@ impl ToCSV for FSMNodeWrapper {
             let mut iter = part.0.split(Self::FIELD_DELIM);
             let id: usize = iter.next().unwrap().parse().unwrap();
             let parent = nodes.get(&id).unwrap();
-            while let Some(part) = iter.next() {
+            for part in iter {
                 let c_id: NodeId = part.parse().unwrap();
                 #[cfg(not(debug_assertions))]
                 unsafe {

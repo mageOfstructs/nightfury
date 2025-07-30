@@ -27,14 +27,14 @@ pub mod protocol;
 mod esc_seq;
 
 thread_local! {
-    static CNT: RefCell<usize> = RefCell::new(0);
+    static CNT: RefCell<usize> = const { RefCell::new(0) };
 }
 
 fn get_id() -> usize {
     let mut ret = 0;
     CNT.with_borrow(|cnt| ret = *cnt);
     CNT.with_borrow_mut(|cnt| *cnt += 1);
-    return ret;
+    ret
 }
 fn dbg_id() {
     debug_println!("{:?}", CNT);
@@ -71,8 +71,8 @@ pub fn get_test_fsm() -> FSMNodeWrapper {
     let child2 = FSMNode::new(sign_token, &root);
     let types = FSMNode::new_required(NodeType::Null, &child);
 
-    let int = FSMNode::new_keyword_with_parent("int".to_string(), types.clone());
-    let float = FSMNode::new_keyword_with_parent("short".to_string(), types.clone());
+    FSMNode::new_keyword_with_parent("int".to_string(), types.clone());
+    FSMNode::new_keyword_with_parent("short".to_string(), types.clone());
     child.borrow_mut().add_child(&types);
     child2.borrow_mut().add_child(&types);
     root
@@ -214,9 +214,9 @@ impl FSMCursor {
     pub fn input_buf(&self) -> &str {
         &self.input_buf
     }
-    fn handle_userdefined_combo(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
+    fn handle_userdefined_combo(&mut self, input: char, final_chars: &[char]) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
-        if let Some(_) = child_idx {
+        if child_idx.is_some() {
             let strong_ref = self.get_cur_ast_binding();
             // let borrow = strong_ref.borrow();
             // let next_node = FSMRc::clone(&borrow.children[child_idx]);
@@ -229,7 +229,7 @@ impl FSMCursor {
                         && short.starts_with(input)
                     {
                         println!("handle_userdefined_combo: found another keyword!");
-                        self.update_cursor(&c);
+                        self.update_cursor(c);
                         self.input_buf.clear();
                         ret = Some(expanded.clone());
                         true
@@ -250,7 +250,7 @@ impl FSMCursor {
             None
         }
     }
-    fn handle_userdefined(&mut self, input: char, final_chars: &Vec<char>) -> Option<String> {
+    fn handle_userdefined(&mut self, input: char, final_chars: &[char]) -> Option<String> {
         let child_idx = final_chars.iter().position(|char| *char == input);
         if let Some(child_idx) = child_idx {
             let strong_ref = self.get_cur_ast_binding();
@@ -284,14 +284,8 @@ impl FSMCursor {
         treenode: &FSMRc<FSMLock<FSMNode>>,
     ) -> Option<FSMRc<FSMLock<FSMNode>>> {
         treenode.borrow().walk_fsm_breadth(
-            &mut |_, _, child, _| match &child.value {
-                UserDefined { .. } => true,
-                UserDefinedRegex(regex) | UserDefinedCombo(regex, _)
-                    if regex.is_match(&self.input_buf) =>
-                {
-                    true
-                }
-                _ => false,
+            &mut |_, _, child, _| {
+                matches!(&child.value, UserDefinedCombo(regex, _) if regex.is_match(&self.input_buf))
             },
             false,
         )
@@ -383,86 +377,11 @@ impl FSMCursor {
             borrow.short_id()
         );
         self.input_buf.push(input);
-        // TODO: refactor
-        if borrow.is_done() {
-            let res = self.search_rec(&binding);
-            if let Some(node) = res {
-                self.update_cursor(&node);
-                return match &node.borrow().value {
-                    NodeType::Keyword(Keyword { expanded, .. }) => {
-                        self.input_buf.clear();
-                        Some(AdvanceResult::Expanded(expanded.to_string()))
-                    }
-                    NodeType::UserDefined { final_chars } => {
-                        let res = self.handle_userdefined(input, &final_chars);
-                        res.map(|expanded| AdvanceResult::ExpandedAfterUserdef(expanded))
-                    }
-                    NodeType::UserDefinedRegex(_) => None,
-                    _ => unreachable!(),
-                };
-            }
-        }
         match &borrow.value {
-            NodeType::UserDefined { final_chars, .. } => {
-                let res = self.handle_userdefined(input, final_chars);
-                if res.is_some() {
-                    return res.map(|expanded| AdvanceResult::ExpandedAfterUserdef(expanded));
-                }
-            }
-            NodeType::UserDefinedRegex(r) => {
-                debug_println!("Checking regex against '{}'", &self.input_buf);
-                if r.is_match(&self.input_buf) {
-                    drop(borrow);
-                    binding.borrow_mut().set_is_done(true);
-                    self.input_buf.clear();
-                    self.input_buf.push(input);
-                    let next_node = self.search_rec_internal(&binding, true);
-                    if next_node.is_none() {
-                        debug_println!("No node found");
-                        self.input_buf.clear();
-                        return Some(AdvanceResult::ExpandedAfterUserdef(input.to_string()));
-                    }
-                    let next_node = next_node.unwrap();
-                    self.update_cursor(&next_node);
-                    let ret = if let NodeType::Keyword(Keyword {
-                        short,
-                        expanded,
-                        closing_token: None,
-                        ..
-                    }) = &next_node.borrow().value
-                    {
-                        if short.starts_with(input) {
-                            Some(expanded.clone())
-                        } else {
-                            // FIXME: this is terrible logic
-                            if let Some(next_node) = self.search_rec_internal(&next_node, true) {
-                                self.update_cursor(&next_node);
-                                if let Keyword(Keyword {
-                                    expanded,
-                                    closing_token: None,
-                                    ..
-                                }) = &next_node.borrow().value
-                                // && short.starts_with(input)
-                                {
-                                    Some(expanded.clone())
-                                } else {
-                                    Some(input.to_string())
-                                }
-                            } else {
-                                Some(input.to_string())
-                            }
-                        }
-                    } else {
-                        Some(input.to_string())
-                    };
-                    self.input_buf.clear();
-                    return ret.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp));
-                }
-            }
             UserDefinedCombo(_, f) => {
                 let ret = self.handle_userdefined_combo(input, f);
                 if ret.is_some() {
-                    return ret.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp));
+                    return ret.map(AdvanceResult::ExpandedAfterUserdef);
                 }
             }
             _ => {
@@ -474,18 +393,11 @@ impl FSMCursor {
                             self.input_buf.clear();
                             Some(AdvanceResult::Expanded(expanded.clone()))
                         }
-                        NodeType::UserDefined { final_chars } => {
-                            let res = self.handle_userdefined(input, &final_chars);
-                            res.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp))
-                        }
-                        NodeType::UserDefinedRegex(_) => None,
                         NodeType::UserDefinedCombo(_, f) => {
                             let res = self.handle_userdefined_combo(input, f);
                             Some(
-                                self.check_for_revert(
-                                    res.map(|exp| AdvanceResult::ExpandedAfterUserdef(exp)),
-                                )
-                                .unwrap_or(AdvanceResult::UserDefStarted),
+                                self.check_for_revert(res.map(AdvanceResult::ExpandedAfterUserdef))
+                                    .unwrap_or(AdvanceResult::UserDefStarted),
                             )
                         }
                         _ => unreachable!(),
@@ -533,13 +445,13 @@ impl FSMCursor {
     fn update_cursor(&mut self, node: &FSMRc<FSMLock<FSMNode>>) {
         self.path.push(self.cur_ast_pos.clone());
         self.path_bufs.push(self.input_buf.clone());
-        self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(&node));
+        self.cur_ast_pos = FSMRc::downgrade(&FSMRc::clone(node));
         if let NodeType::Keyword(Keyword {
             closing_token: Some(_),
             ..
         }) = &node.borrow().value
         {
-            self.unfinished_nodes.push(FSMRc::downgrade(&node));
+            self.unfinished_nodes.push(FSMRc::downgrade(node));
         } else if node.borrow().children.is_empty() && self.unfinished_nodes.len() > 1 {
             // we don't need to jump back if only one remains
             self.cur_ast_pos = self.unfinished_nodes.pop().unwrap();
@@ -562,8 +474,8 @@ impl FSMCursor {
     pub fn is_done(&self) -> bool {
         let ast_ref = self.cur_ast_pos.upgrade().unwrap();
         let binding = ast_ref.borrow();
-        match binding.value {
-            UserDefinedRegex(..) | UserDefined { .. } if !binding.is_done() => false,
+        match &binding.value {
+            UserDefinedCombo(r, _) if !r.is_match(&self.input_buf) => false,
             _ => binding.children.is_empty() || !binding.has_useful_children(),
         }
     }
@@ -572,22 +484,15 @@ impl FSMCursor {
         self.cur_ast_pos.upgrade().unwrap()
     }
     pub fn is_in_userdefined_stage(&self) -> bool {
-        match self.get_cur_ast_binding().borrow().value {
-            NodeType::UserDefined { .. }
-            | NodeType::UserDefinedRegex(..)
-            | NodeType::UserDefinedCombo(_, _) => true,
-            _ => false,
-        }
+        matches!(
+            self.get_cur_ast_binding().borrow().value,
+            NodeType::UserDefinedCombo(_, _)
+        )
     }
 
     fn get_current_nodeval(&self) -> NodeType {
         println!("{}", self.get_cur_ast_binding().borrow().id());
         self.get_cur_ast_binding().borrow().value.clone()
-    }
-    fn find_node_with_code(&self, short: &str) -> Option<FSMRc<FSMLock<FSMNode>>> {
-        let binding = self.get_cur_ast_binding();
-        let binding = binding.borrow();
-        binding.find_node_with_code(short)
     }
 }
 

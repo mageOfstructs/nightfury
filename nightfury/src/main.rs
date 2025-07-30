@@ -1,5 +1,3 @@
-#![feature(let_chains)]
-
 // use std::{fs::File, io::Read, path::Path};
 use std::io::Write;
 
@@ -8,7 +6,7 @@ use debug_print::debug_println;
 use lib::*;
 
 fn main() -> std::io::Result<()> {
-    let ebnf = r##"
+    let _ = r##"
         select_statement ::= 'SELECT' select_list 'FROM' table_reference [ where_clause ] ';';
         select_list ::= "*" | ( column_name { "," column_name } );
         
@@ -55,7 +53,7 @@ fn main() -> std::io::Result<()> {
     //     .unwrap()
     //     .read_to_string(&mut ebnf)
     //     .unwrap();
-    if let Ok(root) = frontend::create_graph_from_ebnf(&ebnf) {
+    if let Ok(root) = frontend::create_graph_from_ebnf(ebnf) {
         debug_println!("FSM:");
         root.borrow().dbg();
         debug_println!("FSM node cnt: {}", root.borrow().node_cnt());
@@ -68,7 +66,7 @@ fn main() -> std::io::Result<()> {
                 '\x08' => cursor.clear_inputbuf(),
                 _ => {
                     if let Some(res) = cursor.advance(input) {
-                        print!("{} ", res);
+                        print!("{res} ");
                     }
                 }
             }
