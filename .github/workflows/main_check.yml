@@ -1,0 +1,36 @@
+name: Check Testcases (push to main)
+
+on:
+  pull_request:
+    types:
+      - 'opened'
+    branches:
+      - 'main'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: need the nightly rust toolchain version since we use some unstable features
+      run: rustup override set nightly
+    - name: Cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    - uses: actions/checkout@v4
+    - name: run clippy
+      run: cargo clippy
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Run tests (release)
+      run: cargo test -r --verbose
+
