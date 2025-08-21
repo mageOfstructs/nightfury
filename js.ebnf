@@ -2,12 +2,12 @@ main ::= { statement };
 statement ::= ( ( decl | assignment | fncall ) ';\n' ) | if | block | for | while | function;
 
 decl ::= ( 'let ' | 'var ' | 'const ' ) identifier '= ' value;
-identifier ::= #'[a-zA-Z][a-zA-Z0-9]*';
+identifier ::= #'[_a-zA-Z][_a-zA-Z0-9]*';
 literal ::= 'null' | 'undefined' | number | string | bool | function;
 bool ::= 'true' | 'false';
 number ::= #'[0-9]+(\\.[0-9]+)?';
-string ::= quote #'.*' quote;
-quote ::= ( '\\'' | '"' | '`' );
+string ::= quote #'([^\'"`\\] | \\[\'"`])*' quote;
+quote ::= ( '\'' | '"' | '`' );
 function ::= 'function ' ( identifier )? '(' ( identifier_list )? ') ' block;
 identifier_list ::= identifier { ',' identifier };
 

@@ -41,6 +41,8 @@ pub fn resolve_escape_sequences(input: &str) -> String {
                 'n' => Some('\n'),
                 't' => Some('\t'),
                 'r' => Some('\r'),
+                '\'' => Some('\''),
+                '"' => Some('"'),
                 '\\' => Some('\\'),
                 _ => panic!("Invalid escape sequence {}", c),
             };
