@@ -63,7 +63,10 @@ function connect(path: string, callback: (socket: net.Socket) => void): net.Sock
     if (err) {
       console.error("connect: " + err.toString());
     } else {
-      const socket = net.createConnection(path, () => {
+      const sockopts = {};
+      if (process.platform() === "win32") sockopts.port = path;
+      else sockopts.path = path;
+      const socket = net.createConnection(sockopts, () => {
         vscode.window.showInformationMessage('Connected to Nightfury Server!');
       });
       callback(socket);
@@ -360,7 +363,14 @@ function getRuntimeDir(defaultDir?: string) {
   return defaultDir;
 }
 
+function isWindows() {
+  return process.platform() === "win32";
+}
+
 function getSocketPath() {
+  if (isWindows()) {
+    return "14978";
+  }
   return getRuntimeDir('/home/jason/clones/nightfury/nightfury-server') + '/nightfury.sock';
 }
 
