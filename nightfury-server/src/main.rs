@@ -65,7 +65,7 @@ fn get_sock_addr() -> String {
         dir.push_str("/nightfury.sock");
         dir
     } else {
-        "8080".to_string()
+        "14978".to_string() // 'nigh' encoded with numbers
     }
 }
 
