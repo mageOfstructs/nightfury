@@ -39,14 +39,14 @@ cargo run --release # release build, almost no logging (i.e. what you should use
 
 ## Reading the FSM
 
-Run the program in debug mode. Most of its output is debugging information, which will be documented *someday*. For now, you just need the section after `FSM:`. This is the FSM nightfury generated from the provided ebnf. It currently supports three types of nodes:
+Run the cli with the `dbg` subcommand. This will print the FSM nightfury generated from the provided ebnf. It currently supports three types of nodes:
 
 - `Keyword`: some keyword, has two important fields: `expanded` (the actual keyword) and `short` (the character sequence you need to type for it to be autocompleted)
   - Note: if nightfury can definitely determine what keyword should be inserted before you finish typing the entire short-sequence, it will insert it without needing you to finish typing the `short` sequence
 - `UserDefinedCombo`: section for a user-defined token, e.g. identifiers. Consists of a regex (used for deciding which branch to take) and an array of characters called "final_tokens" (used to determine when the userdefined token is completed)
 - `Null`: placeholder node, used to either combine paths or split them apart
 
-The indentation shows you the general flow of the graph. If you see a "Cycle to ID", then that means there is a node link that cannot cleanly be displayed in the tree view (e.g. cycles)
+The indentation shows you the general flow of the graph. If you see a "Cycle to <ID>", then that means there is a node link that cannot cleanly be displayed in the tree-like view (e.g. cycles)
 
 ## Architecture
 
