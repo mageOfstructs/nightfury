@@ -11,10 +11,9 @@ use std::io::BufRead;
 use std::io::Write;
 use std::io::read_to_string;
 use std::io::stdin;
-use std::os::unix::net::UnixStream;
 
 use bufstream::BufStream;
-use lib::protocol::Request;
+use lib::protocol::{Request, Sender};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -64,7 +63,7 @@ enum NightfurySubcommand {
     },
 }
 
-fn send_request(req: Request, stream: &mut BufStream<UnixStream>) -> std::io::Result<()> {
+fn send_request(req: Request, stream: &mut BufStream<Sender>) -> std::io::Result<()> {
     req.write(stream)?;
     Ok(())
 }
@@ -108,7 +107,7 @@ fn main() -> std::io::Result<()> {
             list,
             sock_path,
         } => {
-            let stream = UnixStream::connect(sock_path)?;
+            let stream = Sender::connect(sock_path)?;
             let mut stream = BufStream::new(stream);
             println!("Connected!");
             if list {

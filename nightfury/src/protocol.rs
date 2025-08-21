@@ -1,7 +1,7 @@
 use debug_print::debug_println;
 use std::fmt::Display;
 use std::io::Result as IORes;
-use std::io::{self, BufRead, ErrorKind, Write};
+use std::io::{self, BufRead, ErrorKind, Write, Read};
 
 pub trait WriteNullDelimitedExt {
     fn write_with_null(&mut self, data: &[u8]) -> IORes<()>;
@@ -10,6 +10,24 @@ pub trait WriteNullDelimitedExt {
 
 pub trait ReadUntilNullExt {
     fn read_until_null(&mut self, buf: &mut String) -> IORes<()>;
+}
+
+#[cfg(target_family = "unix")]
+pub type Listener = std::os::unix::net::UnixListener;
+#[cfg(target_family = "unix")]
+pub type Sender = std::os::unix::net::UnixStream;
+
+#[cfg(not(target_family = "unix"))]
+pub type Listener = std::net::TcpListener;
+#[cfg(not(target_family = "unix"))]
+pub type Sender = std::net::TcpStream;
+
+pub fn bind_listener(sock_addr: &str) -> IORes<Listener> {
+    #[cfg(target_family = "unix")]
+    return std::os::unix::net::UnixListener::bind(&sock_addr);
+
+    #[cfg(not(target_family = "unix"))]
+    return std::net::TcpListener::bind(&sock_addr);
 }
 
 impl<S: BufRead> ReadUntilNullExt for S {

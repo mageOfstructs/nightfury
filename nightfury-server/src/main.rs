@@ -3,9 +3,8 @@ use lib::protocol::{ReadRequest, WriteResponse};
 use lib::{AdvanceResult, FSMNodeWrapper, ToCSV, get_test_fsm};
 use std::collections::HashMap;
 use std::fs::{File, read_dir};
-use std::io::Write;
+use std::io::{Write, Read};
 use std::io::read_to_string;
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::exit;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -13,13 +12,14 @@ use std::{env, thread};
 
 use bufstream::BufStream;
 use lib::FSMCursor;
-use lib::protocol::{Request, Response};
+use lib::protocol::{Request, Response, bind_listener};
 
-fn handle_request(
+fn handle_request<S>(
     req: Request,
     cursor: &mut FSMCursor,
-    stream: &mut BufStream<UnixStream>,
-) -> std::io::Result<()> {
+    stream: &mut BufStream<S>,
+) -> std::io::Result<()> 
+where S: Read + Write {
     match req {
         Request::Revert => {
             cursor.revert();
@@ -60,26 +60,38 @@ fn get_sock_path() -> String {
 }
 
 fn get_sock_addr() -> String {
-    let mut dir = get_sock_path();
-    dir.push_str("/nightfury.sock");
-    dir
+    if cfg!(unix) {
+        let mut dir = get_sock_path();
+        dir.push_str("/nightfury.sock");
+        dir
+    } else {
+        "8080".to_string()
+    }
 }
 
 fn cleanup(sock_addr: &str) {
-    std::fs::remove_file(sock_addr).unwrap();
+    if cfg!(unix) {
+        std::fs::remove_file(sock_addr).unwrap();
+    }
 }
 
 fn main() -> std::io::Result<()> {
     let sock_addr = get_sock_addr();
     // if the server panicked and didn't cleanup, do that now
-    let _ = std::fs::remove_file(&sock_addr);
+    let _ = cleanup(&sock_addr);
     let sock_addr_clone = sock_addr.clone();
     ctrlc::set_handler(move || {
         cleanup(&sock_addr_clone);
         exit(1);
     })
     .unwrap();
-    let listener = UnixListener::bind(&sock_addr)?;
+
+    // #[cfg(target_family = "unix")]
+    // let listener = std::os::unix::net::UnixListener::bind(&sock_addr)?;
+    // #[cfg(not(target_family = "unix"))]
+    // let listener = std::net::TcpListener::bind(&sock_addr)?;
+    let listener = bind_listener(&sock_addr)?;
+
     let mut handles = Vec::new();
     let fsms = Arc::new(RwLock::new(HashMap::new()));
 
@@ -151,7 +163,7 @@ fn main() -> std::io::Result<()> {
                             Request::Initialize(name)
                                 if let Some(fsm) = fsms_clone.read().unwrap().get(name) =>
                             {
-                                if cursors.len() == u8::MAX.into() {
+                                if cursors.len() == u8::MAX as usize {
                                     server_err(&mut stream, "Cursor limit exceeded")?;
                                     continue;
                                 }
@@ -209,7 +221,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn server_err(stream: &mut BufStream<UnixStream>, errmsg: &str) -> std::io::Result<()> {
+fn server_err<S: Read + Write>(stream: &mut BufStream<S>, errmsg: &str) -> std::io::Result<()> {
     eprintln!("{errmsg}");
     stream.write_err(errmsg)
 }
